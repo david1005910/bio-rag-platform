@@ -97,3 +97,12 @@ export interface HotTopic {
   count: number
   growthRate: number
 }
+
+// PDF types
+export interface PDFInfo {
+  pmid: string
+  pmcid?: string
+  hasPdf: boolean
+  pdfUrl?: string
+  isOpenAccess: boolean
+}

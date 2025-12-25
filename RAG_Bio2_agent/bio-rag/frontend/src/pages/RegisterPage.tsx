@@ -78,29 +78,29 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center space-x-2">
-            <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-xl">B</span>
             </div>
-            <span className="text-2xl font-bold text-gray-900">Bio-RAG</span>
+            <span className="text-2xl font-bold liquid-text">Bio-RAG</span>
           </Link>
-          <h1 className="mt-6 text-2xl font-bold text-gray-900">회원가입</h1>
-          <p className="mt-2 text-gray-600">새 계정을 만드세요</p>
+          <h1 className="mt-6 text-2xl font-bold liquid-text">회원가입</h1>
+          <p className="mt-2 liquid-text-muted">새 계정을 만드세요</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="glossy-panel p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+              <div className="p-3 bg-red-500/20 border border-red-400/30 text-red-200 rounded-xl text-sm">
                 {error}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium liquid-text mb-2">
                 이름
               </label>
               <input
@@ -109,13 +109,13 @@ export default function RegisterPage() {
                 value={formData.name}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="glossy-input w-full px-4 py-3"
                 placeholder="홍길동"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium liquid-text mb-2">
                 이메일
               </label>
               <input
@@ -124,13 +124,13 @@ export default function RegisterPage() {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="glossy-input w-full px-4 py-3"
                 placeholder="your@email.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium liquid-text mb-2">
                 비밀번호
               </label>
               <input
@@ -139,13 +139,13 @@ export default function RegisterPage() {
                 value={formData.password}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="glossy-input w-full px-4 py-3"
                 placeholder="8자 이상"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium liquid-text mb-2">
                 비밀번호 확인
               </label>
               <input
@@ -154,20 +154,20 @@ export default function RegisterPage() {
                 value={formData.passwordConfirm}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="glossy-input w-full px-4 py-3"
                 placeholder="••••••••"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium liquid-text mb-2">
                 연구 분야 (선택)
               </label>
               <select
                 name="researchField"
                 value={formData.researchField}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="glossy-input w-full px-4 py-3"
               >
                 <option value="">선택하세요</option>
                 {researchFields.map((field) => (
@@ -181,15 +181,15 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={registerMutation.isPending}
-              className="w-full py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              className="glossy-btn-primary w-full py-3 font-medium disabled:opacity-50"
             >
               {registerMutation.isPending ? '가입 중...' : '회원가입'}
             </button>
           </form>
 
           <div className="mt-6 text-center">
-            <span className="text-gray-600">이미 계정이 있으신가요? </span>
-            <Link to="/login" className="text-primary-600 hover:underline">
+            <span className="liquid-text-muted">이미 계정이 있으신가요? </span>
+            <Link to="/login" className="text-cyan-300 hover:text-cyan-200 transition-colors">
               로그인
             </Link>
           </div>

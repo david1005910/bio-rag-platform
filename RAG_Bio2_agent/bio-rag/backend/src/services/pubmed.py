@@ -5,6 +5,7 @@ import aiohttp
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -95,11 +96,13 @@ class PubMedService:
             "usehistory": "n"
         })
 
-        if min_date:
-            params["mindate"] = min_date
-        if max_date:
-            params["maxdate"] = max_date
-            params["datetype"] = "pdat"
+        # Apply date filters - datetype must be set for date filtering to work
+        if min_date or max_date:
+            params["datetype"] = "pdat"  # Publication date
+            if min_date:
+                params["mindate"] = min_date
+            if max_date:
+                params["maxdate"] = max_date
 
         try:
             async with session.get(ESEARCH_URL, params=params) as response:
@@ -288,7 +291,11 @@ class PubMedService:
         self,
         query: str,
         max_results: int = 10,
-        sort: str = "relevance"
+        sort: str = "relevance",
+        year_from: Optional[int] = None,
+        year_to: Optional[int] = None,
+        journals: Optional[List[str]] = None,
+        authors: Optional[List[str]] = None
     ) -> Tuple[int, List[PubMedPaper]]:
         """
         Search PubMed and fetch paper details in one call
@@ -297,11 +304,37 @@ class PubMedService:
             query: Search query
             max_results: Maximum number of results
             sort: Sort order
+            year_from: Minimum publication year
+            year_to: Maximum publication year
+            journals: Filter by journal names
+            authors: Filter by author names
 
         Returns:
             Tuple of (total count, list of papers)
         """
-        total, pmids = await self.search(query, max_results, sort)
+        # Build enhanced query with filters
+        enhanced_query = query
+
+        # Add date filter to query (more reliable than mindate/maxdate params with relevance sort)
+        if year_from and year_to:
+            enhanced_query = f"({enhanced_query}) AND ({year_from}:{year_to}[pdat])"
+        elif year_from:
+            current_year = datetime.now().year
+            enhanced_query = f"({enhanced_query}) AND ({year_from}:{current_year}[pdat])"
+        elif year_to:
+            enhanced_query = f"({enhanced_query}) AND (1900:{year_to}[pdat])"
+
+        # Add journal filter to query
+        if journals:
+            journal_terms = " OR ".join([f'"{j}"[Journal]' for j in journals])
+            enhanced_query = f"({enhanced_query}) AND ({journal_terms})"
+
+        # Add author filter to query
+        if authors:
+            author_terms = " OR ".join([f'{a}[Author]' for a in authors])
+            enhanced_query = f"({enhanced_query}) AND ({author_terms})"
+
+        total, pmids = await self.search(enhanced_query, max_results, sort)
 
         if not pmids:
             return total, []

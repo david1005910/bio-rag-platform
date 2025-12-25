@@ -1,10 +1,16 @@
 """Library API Endpoints - User's saved papers"""
 
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from src.core.security import get_current_user_id
+from src.data.library_store import library_store
+from src.services.pubmed import get_pubmed_service
+from src.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -24,6 +30,8 @@ class SavedPaper(BaseModel):
     pmid: str
     title: str
     abstract: str
+    authors: List[str] = []
+    journal: str = ""
     tags: List[str] = []
     notes: Optional[str] = None
     saved_at: str
@@ -46,6 +54,12 @@ class UpdatePaperRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class CheckSavedResponse(BaseModel):
+    """Check if paper is saved response"""
+    is_saved: bool
+    paper_id: Optional[str] = None
+
+
 # ============== Endpoints ==============
 
 @router.post("/papers", response_model=SavedPaper)
@@ -57,21 +71,51 @@ async def save_paper(
     Save a paper to user's library
 
     - Requires authentication
+    - Fetches paper details from PubMed
     - Can add tags and notes
     """
-    import uuid
-    from datetime import datetime
+    # Fetch paper details from PubMed
+    title = "Unknown Title"
+    abstract = "No abstract available"
+    authors = []
+    journal = ""
 
-    # TODO: Save to database
+    try:
+        pubmed = get_pubmed_service(api_key=settings.PUBMED_API_KEY)
+        papers = await pubmed.fetch_papers([request.pmid])
+
+        if papers:
+            paper = papers[0]
+            title = paper.title
+            abstract = paper.abstract or "No abstract available"
+            authors = paper.authors
+            journal = paper.journal
+
+    except Exception as e:
+        logger.error(f"Failed to fetch paper {request.pmid}: {e}")
+
+    # Save to library
+    saved = library_store.save_paper(
+        user_id=user_id,
+        pmid=request.pmid,
+        title=title,
+        abstract=abstract,
+        authors=authors,
+        journal=journal,
+        tags=request.tags,
+        notes=request.notes
+    )
 
     return SavedPaper(
-        id=str(uuid.uuid4()),
-        pmid=request.pmid,
-        title="Sample Paper Title",
-        abstract="Paper abstract...",
-        tags=request.tags,
-        notes=request.notes,
-        saved_at=datetime.utcnow().isoformat()
+        id=saved.id,
+        pmid=saved.pmid,
+        title=saved.title,
+        abstract=saved.abstract,
+        authors=saved.authors,
+        journal=saved.journal,
+        tags=saved.tags,
+        notes=saved.notes,
+        saved_at=saved.saved_at if isinstance(saved.saved_at, str) else saved.saved_at.isoformat()
     )
 
 
@@ -89,11 +133,47 @@ async def get_saved_papers(
     - Supports filtering by tag
     - Supports pagination
     """
-    # TODO: Fetch from database
+    total, papers = library_store.get_papers(
+        user_id=user_id,
+        tag=tag,
+        limit=limit,
+        offset=offset
+    )
 
     return SavedPaperListResponse(
-        total=0,
-        papers=[]
+        total=total,
+        papers=[
+            SavedPaper(
+                id=p.id,
+                pmid=p.pmid,
+                title=p.title,
+                abstract=p.abstract,
+                authors=p.authors,
+                journal=p.journal,
+                tags=p.tags,
+                notes=p.notes,
+                saved_at=p.saved_at if isinstance(p.saved_at, str) else p.saved_at.isoformat()
+            )
+            for p in papers
+        ]
+    )
+
+
+@router.get("/papers/check/{pmid}", response_model=CheckSavedResponse)
+async def check_paper_saved(
+    pmid: str,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Check if a paper is already saved
+
+    - Requires authentication
+    """
+    paper = library_store.get_paper_by_pmid(user_id, pmid)
+
+    return CheckSavedResponse(
+        is_saved=paper is not None,
+        paper_id=paper.id if paper else None
     )
 
 
@@ -107,9 +187,24 @@ async def get_saved_paper(
 
     - Requires authentication
     """
-    raise HTTPException(
-        status_code=404,
-        detail=f"Saved paper {paper_id} not found"
+    paper = library_store.get_paper(user_id, paper_id)
+
+    if not paper:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Saved paper {paper_id} not found"
+        )
+
+    return SavedPaper(
+        id=paper.id,
+        pmid=paper.pmid,
+        title=paper.title,
+        abstract=paper.abstract,
+        authors=paper.authors,
+        journal=paper.journal,
+        tags=paper.tags,
+        notes=paper.notes,
+        saved_at=paper.saved_at if isinstance(paper.saved_at, str) else paper.saved_at.isoformat()
     )
 
 
@@ -124,9 +219,29 @@ async def update_saved_paper(
 
     - Requires authentication
     """
-    raise HTTPException(
-        status_code=404,
-        detail=f"Saved paper {paper_id} not found"
+    paper = library_store.update_paper(
+        user_id=user_id,
+        paper_id=paper_id,
+        tags=request.tags,
+        notes=request.notes
+    )
+
+    if not paper:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Saved paper {paper_id} not found"
+        )
+
+    return SavedPaper(
+        id=paper.id,
+        pmid=paper.pmid,
+        title=paper.title,
+        abstract=paper.abstract,
+        authors=paper.authors,
+        journal=paper.journal,
+        tags=paper.tags,
+        notes=paper.notes,
+        saved_at=paper.saved_at if isinstance(paper.saved_at, str) else paper.saved_at.isoformat()
     )
 
 
@@ -140,7 +255,13 @@ async def delete_saved_paper(
 
     - Requires authentication
     """
-    # TODO: Delete from database
+    success = library_store.delete_paper(user_id, paper_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Saved paper {paper_id} not found"
+        )
 
     return {"message": f"Paper {paper_id} removed from library"}
 
@@ -154,6 +275,6 @@ async def get_tags(
 
     - Requires authentication
     """
-    # TODO: Fetch from database
+    tags = library_store.get_tags(user_id)
 
-    return TagListResponse(tags=[])
+    return TagListResponse(tags=tags)

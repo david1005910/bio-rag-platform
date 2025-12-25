@@ -56,6 +56,12 @@ class VectorDBStatsResponse(BaseModel):
     vectors_count: int
     status: str
     search_mode: str
+    dense_engine: Optional[str] = None
+    sparse_engine: Optional[str] = None
+    splade_indexed: Optional[bool] = None
+    splade_vocab_size: Optional[int] = None
+    with_embeddings: Optional[int] = None
+    qdrant_status: Optional[str] = None
 
 
 class SearchVectorDBRequest(BaseModel):
@@ -283,60 +289,97 @@ Your output (terms only, comma-separated):"""
 class QdrantDenseSearch:
     """
     Dense vector search using Qdrant vector database.
-    Falls back to in-memory search if Qdrant is not available.
+    Supports three modes:
+    1. Server mode: Connect to Qdrant server (Docker/standalone)
+    2. Local mode: Use local file-based storage (no Docker required)
+    3. In-memory mode: Fallback if Qdrant is not available
     """
     def __init__(self):
         self.qdrant_client = None
         self.collection_name = settings.QDRANT_COLLECTION or "biomedical_papers"
         self.embedding_dim = 1536
         self.use_qdrant = False
+        self.qdrant_mode = "none"  # "server", "local", or "none"
         self._init_qdrant()
 
     def _init_qdrant(self):
-        """Initialize Qdrant client if available"""
-        try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.http.models import Distance, VectorParams
+        """Initialize Qdrant client - try server first, then local mode"""
+        from qdrant_client import QdrantClient
+        from qdrant_client.http.models import Distance, VectorParams
 
+        # Try 1: Connect to Qdrant server (Docker)
+        try:
             self.qdrant_client = QdrantClient(
                 host=settings.QDRANT_HOST,
-                port=settings.QDRANT_PORT
+                port=settings.QDRANT_PORT,
+                timeout=5.0
             )
-
-            # Check if collection exists
-            collections = self.qdrant_client.get_collections().collections
-            collection_names = [c.name for c in collections]
-
-            if self.collection_name not in collection_names:
-                self.qdrant_client.create_collection(
-                    collection_name=self.collection_name,
-                    vectors_config=VectorParams(
-                        size=self.embedding_dim,
-                        distance=Distance.COSINE
-                    )
-                )
-                logger.info(f"Created Qdrant collection: {self.collection_name}")
-
+            # Test connection
+            self.qdrant_client.get_collections()
+            self._ensure_collection()
             self.use_qdrant = True
-            logger.info(f"Connected to Qdrant at {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
+            self.qdrant_mode = "server"
+            logger.info(f"Connected to Qdrant server at {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
+            return
         except Exception as e:
-            logger.warning(f"Qdrant not available, using in-memory search: {e}")
-            self.use_qdrant = False
+            logger.info(f"Qdrant server not available: {e}")
+
+        # Try 2: Use local file-based Qdrant
+        try:
+            import os
+            qdrant_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "qdrant")
+            os.makedirs(qdrant_path, exist_ok=True)
+
+            self.qdrant_client = QdrantClient(path=qdrant_path)
+            self._ensure_collection()
+            self.use_qdrant = True
+            self.qdrant_mode = "local"
+            logger.info(f"Using Qdrant local storage at {qdrant_path}")
+            return
+        except Exception as e:
+            logger.warning(f"Qdrant local mode failed: {e}")
+
+        # Fallback: In-memory mode
+        logger.warning("Qdrant not available, using in-memory search")
+        self.use_qdrant = False
+        self.qdrant_mode = "none"
+
+    def _ensure_collection(self):
+        """Ensure collection exists"""
+        from qdrant_client.http.models import Distance, VectorParams
+
+        collections = self.qdrant_client.get_collections().collections
+        collection_names = [c.name for c in collections]
+
+        if self.collection_name not in collection_names:
+            self.qdrant_client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(
+                    size=self.embedding_dim,
+                    distance=Distance.COSINE
+                )
+            )
+            logger.info(f"Created Qdrant collection: {self.collection_name}")
 
     def get_collection_info(self) -> Dict:
         """Get Qdrant collection info"""
         if not self.use_qdrant:
-            return {"status": "in_memory", "vectors_count": 0}
+            return {"status": "in_memory", "vectors_count": 0, "mode": "none"}
 
         try:
             info = self.qdrant_client.get_collection(self.collection_name)
             return {
-                "status": "qdrant",
-                "vectors_count": info.vectors_count,
-                "points_count": info.points_count
+                "status": f"qdrant_{self.qdrant_mode}",
+                "vectors_count": info.vectors_count if hasattr(info, 'vectors_count') else 0,
+                "points_count": info.points_count if hasattr(info, 'points_count') else 0,
+                "mode": self.qdrant_mode
             }
         except Exception as e:
-            return {"status": "error", "error": str(e)}
+            logger.debug(f"get_collection_info error: {e}")
+            # If we're in local mode and Qdrant is working, return success status
+            if self.qdrant_mode == "local":
+                return {"status": f"qdrant_local", "vectors_count": 0, "mode": self.qdrant_mode}
+            return {"status": "error", "error": str(e), "mode": self.qdrant_mode}
 
 
 # ============== Hybrid Vector Store ==============
@@ -521,13 +564,15 @@ class HybridVectorStore:
         # Try Qdrant first
         if self.qdrant_dense.use_qdrant:
             try:
-                qdrant_results = self.qdrant_dense.qdrant_client.search(
+                # Use query_points API (Qdrant 1.7+)
+                qdrant_response = self.qdrant_dense.qdrant_client.query_points(
                     collection_name=self.qdrant_dense.collection_name,
-                    query_vector=query_embedding.tolist(),
-                    limit=top_k
+                    query=query_embedding.tolist(),
+                    limit=top_k,
+                    with_payload=True
                 )
 
-                for r in qdrant_results:
+                for r in qdrant_response.points:
                     # Normalize dense score to [0, 1]
                     normalized_dense = self._normalize_dense_score(r.score)
                     results.append({
@@ -703,15 +748,32 @@ class HybridVectorStore:
         """Get store statistics"""
         has_embeddings = sum(1 for d in self.documents if d["embedding"] is not None)
         qdrant_info = self.qdrant_dense.get_collection_info()
+        qdrant_mode = self.qdrant_dense.qdrant_mode
+
+        # Determine actual search mode based on availability
+        if self.qdrant_dense.use_qdrant:
+            dense_engine = f"qdrant_{qdrant_mode}"
+        else:
+            dense_engine = "in_memory"
+        sparse_engine = "splade" if self._splade_fitted else "none"
+
+        if self.qdrant_dense.use_qdrant:
+            search_mode = f"hybrid (Qdrant {qdrant_mode} + SPLADE sparse)"
+        else:
+            search_mode = f"hybrid (In-memory dense + SPLADE sparse)"
 
         return {
             "collection_name": "biomedical_papers",
             "vectors_count": len(self.documents),
             "with_embeddings": has_embeddings,
             "splade_indexed": self._splade_fitted,
+            "splade_vocab_size": len(self.splade.idf) if self._splade_fitted else 0,
             "qdrant_status": qdrant_info.get("status", "unknown"),
             "qdrant_vectors": qdrant_info.get("vectors_count", 0),
-            "search_mode": "hybrid (Qdrant dense + SPLADE sparse)",
+            "qdrant_mode": qdrant_mode,
+            "dense_engine": dense_engine,
+            "sparse_engine": sparse_engine,
+            "search_mode": search_mode,
             "status": "ready"
         }
 
@@ -876,6 +938,7 @@ async def get_vectordb_stats():
     - Returns collection info
     - Shows number of stored vectors
     - Indicates search mode (hybrid/dense/sparse)
+    - Shows SPLADE indexing status
     """
     vector_store = get_vector_store()
     stats = vector_store.get_stats()
@@ -884,7 +947,13 @@ async def get_vectordb_stats():
         collection_name=stats["collection_name"],
         vectors_count=stats["vectors_count"],
         status=stats["status"],
-        search_mode=stats["search_mode"]
+        search_mode=stats["search_mode"],
+        dense_engine=stats.get("dense_engine"),
+        sparse_engine=stats.get("sparse_engine"),
+        splade_indexed=stats.get("splade_indexed"),
+        splade_vocab_size=stats.get("splade_vocab_size"),
+        with_embeddings=stats.get("with_embeddings"),
+        qdrant_status=stats.get("qdrant_status")
     )
 
 

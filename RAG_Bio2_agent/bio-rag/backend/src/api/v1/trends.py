@@ -1,11 +1,16 @@
 """Trends API Endpoints - Research trend analysis"""
 
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 from datetime import date, datetime
 import random
+import logging
+import aiohttp
 
+from src.core.config import settings
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -241,3 +246,150 @@ async def get_wordcloud_data(
         "period": period,
         "words": words
     }
+
+
+# ============== AI Trend Analysis ==============
+
+class TrendAnalysisRequest(BaseModel):
+    """Request for AI trend analysis"""
+    query: str
+    language: str = "ko"  # ko or en
+
+
+class TrendAnalysisResponse(BaseModel):
+    """AI trend analysis response"""
+    query: str
+    analysis: str
+    key_trends: List[str]
+    related_topics: List[str]
+    research_direction: str
+    summary: str
+
+
+@router.post("/analyze", response_model=TrendAnalysisResponse)
+async def analyze_research_trend(request: TrendAnalysisRequest):
+    """
+    AI-powered research trend analysis using OpenAI
+
+    - Analyzes research trends for a given query
+    - Provides key trends, related topics, and research direction
+    - Returns analysis in the requested language
+    """
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+
+    try:
+        # Build comprehensive prompt for detailed trend analysis
+        lang_instruction = "Korean (한국어)" if request.language == "ko" else "English"
+
+        system_prompt = f"""You are a world-class biomedical research trend analyst with deep expertise in analyzing scientific literature and research trends. Provide a comprehensive, detailed analysis of research trends for the given query.
+
+Your response MUST be in JSON format with the following structure:
+{{
+    "analysis": "VERY DETAILED analysis (minimum 800-1000 words) covering multiple aspects",
+    "key_trends": ["Trend 1 with brief explanation", "Trend 2 with brief explanation", "Trend 3", "Trend 4", "Trend 5", "Trend 6", "Trend 7"],
+    "related_topics": ["Related topic 1", "Related topic 2", "Related topic 3", "Related topic 4", "Related topic 5"],
+    "research_direction": "Comprehensive future research direction (200-300 words)",
+    "summary": "Executive summary (150-200 words)"
+}}
+
+The "analysis" field MUST include ALL of the following sections in detail:
+
+1. **연구 개요 및 중요성 (Research Overview & Significance)**
+   - 해당 연구 분야의 정의와 범위
+   - 왜 이 연구가 중요한지
+   - 사회적, 의학적 영향
+
+2. **역사적 발전 과정 (Historical Development)**
+   - 주요 마일스톤과 돌파구
+   - 기술/방법론의 진화
+   - 핵심 발견들
+
+3. **현재 연구 동향 (Current Research Trends)**
+   - 가장 활발한 연구 주제들
+   - 주요 연구 접근법과 방법론
+   - 최신 기술 및 도구
+
+4. **주요 연구 기관 및 연구자 (Key Institutions & Researchers)**
+   - 선도적인 연구 기관들
+   - 영향력 있는 연구자들
+   - 주요 협력 네트워크
+
+5. **임상 적용 및 산업 동향 (Clinical Applications & Industry Trends)**
+   - 현재 임상 시험 현황
+   - 승인된 치료법/제품
+   - 주요 기업들의 활동
+
+6. **도전과제 및 한계점 (Challenges & Limitations)**
+   - 기술적 한계
+   - 윤리적 고려사항
+   - 규제 관련 이슈
+
+7. **미래 전망 (Future Outlook)**
+   - 예상되는 발전 방향
+   - 새로운 기회 영역
+   - 해결해야 할 과제들
+
+Guidelines:
+- Be extremely detailed and comprehensive
+- Include specific examples, statistics, and data when possible
+- Mention recent publications (2023-2024) and breakthroughs
+- Reference specific clinical trials, companies, or products
+- Provide actionable insights for researchers
+- Use proper scientific terminology
+
+CRITICAL: Respond entirely in {lang_instruction}. Make the analysis as detailed and informative as possible."""
+
+        user_prompt = f"""Please provide a comprehensive and detailed research trend analysis for: {request.query}
+
+Include specific data, recent developments, key players, clinical applications, challenges, and future directions. Make the analysis thorough and informative, suitable for researchers and professionals in the field."""
+
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+
+            payload = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 4000,
+                "response_format": {"type": "json_object"}
+            }
+
+            async with session.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"OpenAI API error: {response.status} - {error_text}")
+                    raise HTTPException(status_code=500, detail="AI analysis failed")
+
+                data = await response.json()
+                content = data["choices"][0]["message"]["content"]
+
+                # Parse JSON response
+                import json
+                result = json.loads(content)
+
+                return TrendAnalysisResponse(
+                    query=request.query,
+                    analysis=result.get("analysis", ""),
+                    key_trends=result.get("key_trends", []),
+                    related_topics=result.get("related_topics", []),
+                    research_direction=result.get("research_direction", ""),
+                    summary=result.get("summary", "")
+                )
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse AI response: {e}")
+        raise HTTPException(status_code=500, detail="Failed to parse AI response")
+    except Exception as e:
+        logger.error(f"Trend analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

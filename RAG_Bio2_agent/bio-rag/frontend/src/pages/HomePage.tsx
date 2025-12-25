@@ -24,31 +24,31 @@ const features = [
 
 export default function HomePage() {
   return (
-    <div className="bg-white">
+    <div>
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
           <div className="text-center">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 tracking-tight">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold liquid-text tracking-tight">
               AI로 더 빠르게,
               <br />
-              <span className="text-primary-600">바이오 연구</span>를 혁신하세요
+              <span className="bg-gradient-to-r from-yellow-200 via-pink-200 to-cyan-200 bg-clip-text text-transparent">바이오 연구</span>를 혁신하세요
             </h1>
-            <p className="mt-6 text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="mt-6 text-lg sm:text-xl liquid-text-muted max-w-3xl mx-auto">
               Bio-RAG는 PubMed 논문을 AI로 분석하여 연구자들이 더 빠르게
               인사이트를 얻을 수 있도록 돕습니다.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/search"
-                className="inline-flex items-center justify-center px-8 py-4 bg-primary-600 text-white font-medium rounded-xl hover:bg-primary-700 transition-colors"
+                className="glossy-btn-primary inline-flex items-center justify-center px-8 py-4 font-medium"
               >
                 <Search className="mr-2" size={20} />
                 논문 검색 시작
               </Link>
               <Link
                 to="/chat"
-                className="inline-flex items-center justify-center px-8 py-4 bg-gray-100 text-gray-900 font-medium rounded-xl hover:bg-gray-200 transition-colors"
+                className="glossy-btn inline-flex items-center justify-center px-8 py-4 font-medium"
               >
                 <MessageSquare className="mr-2" size={20} />
                 AI에게 질문하기
@@ -56,21 +56,16 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-
-        {/* Background decoration */}
-        <div className="absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-gradient-to-r from-primary-100 to-blue-100 blur-3xl opacity-50" />
-        </div>
       </div>
 
       {/* Features Section */}
-      <div className="py-24 bg-gray-50">
+      <div className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-900">
+            <h2 className="text-3xl font-bold liquid-text">
               연구를 더 스마트하게
             </h2>
-            <p className="mt-4 text-lg text-gray-600">
+            <p className="mt-4 text-lg liquid-text-muted">
               AI 기술로 논문 분석 시간을 70% 단축하세요
             </p>
           </div>
@@ -82,15 +77,15 @@ export default function HomePage() {
                 <Link
                   key={feature.title}
                   to={feature.link}
-                  className="group bg-white p-8 rounded-2xl shadow-sm hover:shadow-lg transition-shadow"
+                  className="group glossy-panel p-8 hover:scale-105 transition-all duration-300"
                 >
-                  <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-primary-200 transition-colors">
-                    <Icon className="text-primary-600" size={24} />
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500/50 to-pink-500/50 rounded-2xl flex items-center justify-center mb-6 group-hover:from-purple-500/70 group-hover:to-pink-500/70 transition-all shadow-lg">
+                    <Icon className="text-white" size={24} />
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">
+                  <h3 className="text-xl font-semibold liquid-text mb-3">
                     {feature.title}
                   </h3>
-                  <p className="text-gray-600">
+                  <p className="liquid-text-muted">
                     {feature.description}
                   </p>
                 </Link>
@@ -103,41 +98,47 @@ export default function HomePage() {
       {/* Stats Section */}
       <div className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold text-primary-600">35M+</div>
-              <div className="mt-2 text-gray-600">PubMed 논문</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-primary-600">&lt;2s</div>
-              <div className="mt-2 text-gray-600">평균 응답 시간</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-primary-600">95%</div>
-              <div className="mt-2 text-gray-600">답변 정확도</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-primary-600">24/7</div>
-              <div className="mt-2 text-gray-600">AI 지원</div>
+          <div className="glossy-panel p-12">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+              <div>
+                <div className="text-4xl font-bold bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">35M+</div>
+                <div className="mt-2 liquid-text-muted">PubMed 논문</div>
+              </div>
+              <div>
+                <div className="text-4xl font-bold bg-gradient-to-r from-pink-300 to-purple-300 bg-clip-text text-transparent">&lt;2s</div>
+                <div className="mt-2 liquid-text-muted">평균 응답 시간</div>
+              </div>
+              <div>
+                <div className="text-4xl font-bold bg-gradient-to-r from-purple-300 to-blue-300 bg-clip-text text-transparent">95%</div>
+                <div className="mt-2 liquid-text-muted">답변 정확도</div>
+              </div>
+              <div>
+                <div className="text-4xl font-bold bg-gradient-to-r from-blue-300 to-cyan-300 bg-clip-text text-transparent">24/7</div>
+                <div className="mt-2 liquid-text-muted">AI 지원</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* CTA Section */}
-      <div className="py-24 bg-primary-600">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <Zap className="mx-auto text-primary-200 mb-6" size={48} />
-          <h2 className="text-3xl font-bold text-white mb-4">
+      <div className="py-24 mx-4">
+        <div className="max-w-4xl mx-auto glossy-panel p-12 text-center relative overflow-hidden">
+          {/* Decorative blobs inside CTA */}
+          <div className="absolute -top-10 -right-10 w-40 h-40 blob blob-cyan opacity-50" />
+          <div className="absolute -bottom-10 -left-10 w-32 h-32 blob blob-pink opacity-50" />
+
+          <Zap className="mx-auto text-yellow-300 mb-6 relative z-10" size={48} />
+          <h2 className="text-3xl font-bold liquid-text mb-4 relative z-10">
             지금 바로 시작하세요
           </h2>
-          <p className="text-lg text-primary-100 mb-8 max-w-2xl mx-auto">
+          <p className="text-lg liquid-text-muted mb-8 max-w-2xl mx-auto relative z-10">
             무료로 Bio-RAG를 체험하고 연구 효율성을 높이세요.
             회원가입 없이도 기본 기능을 사용할 수 있습니다.
           </p>
           <Link
             to="/register"
-            className="inline-flex items-center justify-center px-8 py-4 bg-white text-primary-600 font-medium rounded-xl hover:bg-gray-100 transition-colors"
+            className="glossy-btn-primary inline-flex items-center justify-center px-8 py-4 font-medium relative z-10"
           >
             무료 회원가입
           </Link>

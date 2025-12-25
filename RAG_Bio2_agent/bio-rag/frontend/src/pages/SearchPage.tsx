@@ -1,65 +1,285 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Filter, ExternalLink, MessageSquare, Bookmark, BookmarkCheck, Languages, Loader2, Database, CheckCircle } from 'lucide-react'
+import { Search, Filter, ExternalLink, MessageSquare, Bookmark, BookmarkCheck, Languages, Loader2, Database, CheckCircle, X, Calendar, BookOpen, Users, TrendingUp, ChevronLeft, ChevronRight, FileDown, FileX } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { searchApi, libraryApi, vectordbApi } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
-import type { PaperSearchResult } from '@/types'
+import type { PaperSearchResult, PDFInfo } from '@/types'
 
 // Simple Korean detection
 function containsKorean(text: string): boolean {
   return /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text)
 }
 
+// Filter types
+interface SearchFilters {
+  yearFrom?: number
+  yearTo?: number
+  journals?: string[]
+  authors?: string[]
+}
+
+// Parse filters from URL params
+function parseFiltersFromUrl(searchParams: URLSearchParams): SearchFilters {
+  const filters: SearchFilters = {}
+  const yearFrom = searchParams.get('yearFrom')
+  const yearTo = searchParams.get('yearTo')
+  const journals = searchParams.get('journals')
+  const authors = searchParams.get('authors')
+
+  if (yearFrom) filters.yearFrom = parseInt(yearFrom)
+  if (yearTo) filters.yearTo = parseInt(yearTo)
+  if (journals) filters.journals = journals.split(',').filter(Boolean)
+  if (authors) filters.authors = authors.split(',').filter(Boolean)
+
+  return filters
+}
+
+// Convert filters to URL params
+function filtersToUrlParams(filters: SearchFilters): Record<string, string> {
+  const params: Record<string, string> = {}
+  if (filters.yearFrom) params.yearFrom = filters.yearFrom.toString()
+  if (filters.yearTo) params.yearTo = filters.yearTo.toString()
+  if (filters.journals?.length) params.journals = filters.journals.join(',')
+  if (filters.authors?.length) params.authors = filters.authors.join(',')
+  return params
+}
+
+// Constants for pagination
+const PAPERS_PER_PAGE = 10
+const TOTAL_FETCH_LIMIT = 50
+
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
-  const [translatedQuery, setTranslatedQuery] = useState('')
-  const [isKoreanSearch, setIsKoreanSearch] = useState(false)
-  const [isTranslating, setIsTranslating] = useState(false)
   const [isSavingToVectorDB, setIsSavingToVectorDB] = useState(false)
   const [vectorDBSaveResult, setVectorDBSaveResult] = useState<{ saved: number; chunks: number } | null>(null)
+  const [autoSavedQuery, setAutoSavedQuery] = useState<string | null>(null) // Track which query was auto-saved
+
+  // Pagination state - initialize from URL
+  const [currentPage, setCurrentPage] = useState(() => {
+    const pageParam = searchParams.get('page')
+    return pageParam ? parseInt(pageParam) : 1
+  })
+
+  // Filter state - initialize from URL
+  const [showFilters, setShowFilters] = useState(false)
+  const [filters, setFilters] = useState<SearchFilters>(() => parseFiltersFromUrl(searchParams))
+  const [tempFilters, setTempFilters] = useState<SearchFilters>(() => parseFiltersFromUrl(searchParams))
+  const [journalInput, setJournalInput] = useState('')
+  const [authorInput, setAuthorInput] = useState('')
 
   // Get search term from URL params
   const searchTerm = searchParams.get('q') || ''
+  const isKoreanSearch = containsKorean(searchTerm)
 
-  // Translate Korean query using API
-  const translateQuery = useCallback(async (koreanText: string) => {
-    setIsTranslating(true)
-    try {
-      const result = await searchApi.translate(koreanText, 'ko', 'en')
-      setTranslatedQuery(result.translated)
+  // Use React Query for translation (with caching)
+  const { data: translationData, isLoading: isTranslating } = useQuery({
+    queryKey: ['translate', searchTerm],
+    queryFn: async () => {
+      const result = await searchApi.translate(searchTerm, 'ko', 'en')
       return result.translated
-    } catch (error) {
-      console.error('Translation failed:', error)
-      // Fallback: just use original query
-      setTranslatedQuery(koreanText)
-      return koreanText
-    } finally {
-      setIsTranslating(false)
-    }
-  }, [])
-
-  // Initialize query from URL params on mount
-  useEffect(() => {
-    const urlQuery = searchParams.get('q')
-    if (urlQuery) {
-      setQuery(urlQuery)
-      if (containsKorean(urlQuery)) {
-        setIsKoreanSearch(true)
-        translateQuery(urlQuery)
-      }
-    }
-  }, [searchParams, translateQuery])
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['search', isKoreanSearch ? translatedQuery : searchTerm],
-    queryFn: () => searchApi.search(isKoreanSearch ? translatedQuery : searchTerm),
-    enabled: !!(isKoreanSearch ? translatedQuery : searchTerm) && !isTranslating,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    },
+    enabled: !!searchTerm && isKoreanSearch,
+    staleTime: 30 * 60 * 1000, // Cache translation for 30 minutes
+    gcTime: 60 * 60 * 1000, // Keep in cache for 1 hour
   })
 
-  const handleSearch = async (e: React.FormEvent) => {
+  const translatedQuery = translationData || ''
+
+  // Sync query input with URL
+  useEffect(() => {
+    const urlQuery = searchParams.get('q')
+    if (urlQuery && urlQuery !== query) {
+      setQuery(urlQuery)
+    }
+  }, [searchParams])
+
+  // Sync filters and page from URL when navigating back
+  useEffect(() => {
+    const urlFilters = parseFiltersFromUrl(searchParams)
+    const hasUrlFilters = Object.keys(urlFilters).length > 0
+    if (hasUrlFilters) {
+      setFilters(urlFilters)
+      setTempFilters(urlFilters)
+    }
+
+    // Sync page from URL
+    const pageParam = searchParams.get('page')
+    if (pageParam) {
+      const page = parseInt(pageParam)
+      if (page !== currentPage && page >= 1) {
+        setCurrentPage(page)
+      }
+    }
+  }, [searchParams])
+
+  // Convert filters for API
+  const apiFilters = Object.keys(filters).length > 0 ? {
+    year_from: filters.yearFrom,
+    year_to: filters.yearTo,
+    journals: filters.journals,
+    authors: filters.authors,
+  } : undefined
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['search', isKoreanSearch ? translatedQuery : searchTerm, filters],
+    queryFn: () => searchApi.search(isKoreanSearch ? translatedQuery : searchTerm, TOTAL_FETCH_LIMIT, apiFilters),
+    enabled: !!(isKoreanSearch ? translatedQuery : searchTerm) && !isTranslating,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+  })
+
+  // Auto-save search results to VectorDB
+  useEffect(() => {
+    const currentQuery = isKoreanSearch ? translatedQuery : searchTerm
+
+    // Skip if no data, already saving, already saved this query, or no results
+    if (!data?.results?.length || isSavingToVectorDB || autoSavedQuery === currentQuery) {
+      return
+    }
+
+    const autoSaveToVectorDB = async () => {
+      setIsSavingToVectorDB(true)
+      try {
+        const papers = data.results.map((paper: PaperSearchResult) => ({
+          pmid: paper.pmid,
+          title: paper.title,
+          abstract: paper.abstract,
+          authors: paper.authors,
+          journal: paper.journal,
+          publication_date: paper.publicationDate,
+          keywords: paper.keywords || [],
+        }))
+
+        const result = await vectordbApi.savePapers(papers)
+        setVectorDBSaveResult({
+          saved: result.saved_count,
+          chunks: result.total_chunks,
+        })
+        setAutoSavedQuery(currentQuery) // Mark this query as saved
+        console.log(`Auto-saved ${result.saved_count} papers to VectorDB`)
+      } catch (error) {
+        console.error('Auto-save to VectorDB failed:', error)
+      } finally {
+        setIsSavingToVectorDB(false)
+      }
+    }
+
+    autoSaveToVectorDB()
+  }, [data, searchTerm, translatedQuery, isKoreanSearch, isSavingToVectorDB, autoSavedQuery])
+
+  // Calculate pagination
+  const totalResults = data?.results?.length || 0
+  const totalPages = Math.ceil(totalResults / PAPERS_PER_PAGE)
+  const startIndex = (currentPage - 1) * PAPERS_PER_PAGE
+  const endIndex = startIndex + PAPERS_PER_PAGE
+  const currentPageResults = data?.results?.slice(startIndex, endIndex) || []
+
+  // Update URL when page changes (but not on initial load)
+  const updatePageInUrl = (page: number) => {
+    const filterParams = filtersToUrlParams(filters)
+    if (page === 1) {
+      // Don't include page=1 in URL (it's the default)
+      setSearchParams({ q: searchTerm, ...filterParams })
+    } else {
+      setSearchParams({ q: searchTerm, ...filterParams, page: page.toString() })
+    }
+  }
+
+  // Handle page change with URL update
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    updatePageInUrl(page)
+    // Scroll to top of results
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Reset pagination when search term or filters change (not when navigating back)
+  const prevSearchTermRef = useRef(searchTerm)
+  const prevFiltersRef = useRef(filters)
+
+  useEffect(() => {
+    // Only reset if search term or filters actually changed (not from URL sync)
+    if (prevSearchTermRef.current !== searchTerm ||
+        JSON.stringify(prevFiltersRef.current) !== JSON.stringify(filters)) {
+      // Check if this is from URL sync (page already in URL)
+      const pageParam = searchParams.get('page')
+      if (!pageParam) {
+        setCurrentPage(1)
+      }
+      prevSearchTermRef.current = searchTerm
+      prevFiltersRef.current = filters
+    }
+  }, [searchTerm, filters])
+
+  // Check if any filters are active
+  const hasActiveFilters = filters.yearFrom || filters.yearTo ||
+    (filters.journals && filters.journals.length > 0) ||
+    (filters.authors && filters.authors.length > 0)
+
+  // Apply filters and update URL
+  const handleApplyFilters = () => {
+    setFilters(tempFilters)
+    setShowFilters(false)
+    // Update URL with filters
+    if (searchTerm) {
+      const filterParams = filtersToUrlParams(tempFilters)
+      setSearchParams({ q: searchTerm, ...filterParams })
+    }
+  }
+
+  // Clear all filters and update URL
+  const handleClearFilters = () => {
+    setFilters({})
+    setTempFilters({})
+    setJournalInput('')
+    setAuthorInput('')
+    // Update URL without filters
+    if (searchTerm) {
+      setSearchParams({ q: searchTerm })
+    }
+  }
+
+  // Add journal to filter
+  const handleAddJournal = () => {
+    if (journalInput.trim()) {
+      setTempFilters(prev => ({
+        ...prev,
+        journals: [...(prev.journals || []), journalInput.trim()]
+      }))
+      setJournalInput('')
+    }
+  }
+
+  // Remove journal from filter
+  const handleRemoveJournal = (journal: string) => {
+    setTempFilters(prev => ({
+      ...prev,
+      journals: prev.journals?.filter(j => j !== journal)
+    }))
+  }
+
+  // Add author to filter
+  const handleAddAuthor = () => {
+    if (authorInput.trim()) {
+      setTempFilters(prev => ({
+        ...prev,
+        authors: [...(prev.authors || []), authorInput.trim()]
+      }))
+      setAuthorInput('')
+    }
+  }
+
+  // Remove author from filter
+  const handleRemoveAuthor = (author: string) => {
+    setTempFilters(prev => ({
+      ...prev,
+      authors: prev.authors?.filter(a => a !== author)
+    }))
+  }
+
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (query.trim()) {
       const trimmedQuery = query.trim()
@@ -67,17 +287,9 @@ export default function SearchPage() {
       // Reset VectorDB save result for new search
       setVectorDBSaveResult(null)
 
-      // Update URL params (this preserves state on back navigation)
-      setSearchParams({ q: trimmedQuery })
-
-      // Check if Korean and translate using API
-      if (containsKorean(trimmedQuery)) {
-        setIsKoreanSearch(true)
-        await translateQuery(trimmedQuery)
-      } else {
-        setIsKoreanSearch(false)
-        setTranslatedQuery('')
-      }
+      // Update URL params with query and current filters (preserves state on back navigation)
+      const filterParams = filtersToUrlParams(filters)
+      setSearchParams({ q: trimmedQuery, ...filterParams })
     }
   }
 
@@ -194,35 +406,248 @@ export default function SearchPage() {
                       ? 'bg-green-500/30 text-green-200 border border-green-400/30'
                       : 'glossy-btn-primary hover:scale-105'
                   }`}
-                  title="논문을 벡터화하여 VectorDB에 저장 (Hybrid Search용)"
+                  title={`전체 ${totalResults}개 논문을 벡터화하여 VectorDB에 저장`}
                 >
                   {isSavingToVectorDB ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>인덱싱 중... (Embedding 생성)</span>
+                      <span>{totalResults}개 논문 인덱싱 중...</span>
                     </>
                   ) : vectorDBSaveResult ? (
                     <>
                       <CheckCircle size={18} />
-                      <span>인덱싱 완료: {vectorDBSaveResult.saved}개 논문 ({vectorDBSaveResult.chunks} chunks)</span>
+                      <span>완료: {vectorDBSaveResult.saved}개 논문 ({vectorDBSaveResult.chunks} chunks)</span>
                     </>
                   ) : (
                     <>
                       <Database size={18} />
-                      <span>논문 인덱싱 (VectorDB 저장)</span>
+                      <span>전체 {totalResults}개 논문 인덱싱</span>
                     </>
                   )}
                 </button>
               )}
-              <button className="glossy-btn flex items-center gap-2 px-4 py-2">
+              <button
+                onClick={() => {
+                  setTempFilters(filters)
+                  setShowFilters(!showFilters)
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                  hasActiveFilters
+                    ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/30'
+                    : 'glossy-btn'
+                }`}
+              >
                 <Filter size={18} />
                 필터
+                {hasActiveFilters && (
+                  <span className="px-1.5 py-0.5 bg-cyan-500/50 rounded-full text-xs">
+                    {(filters.yearFrom || filters.yearTo ? 1 : 0) +
+                      (filters.journals?.length || 0) +
+                      (filters.authors?.length || 0)}
+                  </span>
+                )}
               </button>
+              {/* Trend Analysis Button */}
+              <Link
+                to={`/trends?q=${encodeURIComponent(searchTerm)}`}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg glossy-btn hover:scale-105 transition-all"
+                title="이 검색어에 대한 연구 트렌드 분석"
+              >
+                <TrendingUp size={18} />
+                트렌드 분석
+              </Link>
             </div>
           </div>
 
+          {/* Filter Panel */}
+          {showFilters && (
+            <div className="glossy-panel p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Filter size={20} className="text-cyan-300" />
+                  검색 필터
+                </h3>
+                <button
+                  onClick={() => setShowFilters(false)}
+                  className="p-1 hover:bg-white/10 rounded"
+                >
+                  <X size={20} className="text-white/70" />
+                </button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Year Range */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-white/80 mb-2">
+                    <Calendar size={16} className="text-cyan-300" />
+                    출판 연도
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      placeholder="시작 년도"
+                      value={tempFilters.yearFrom || ''}
+                      onChange={(e) => setTempFilters(prev => ({
+                        ...prev,
+                        yearFrom: e.target.value ? parseInt(e.target.value) : undefined
+                      }))}
+                      className="glossy-input px-3 py-2 w-full"
+                      min={1900}
+                      max={new Date().getFullYear()}
+                    />
+                    <span className="text-white/50">~</span>
+                    <input
+                      type="number"
+                      placeholder="종료 년도"
+                      value={tempFilters.yearTo || ''}
+                      onChange={(e) => setTempFilters(prev => ({
+                        ...prev,
+                        yearTo: e.target.value ? parseInt(e.target.value) : undefined
+                      }))}
+                      className="glossy-input px-3 py-2 w-full"
+                      min={1900}
+                      max={new Date().getFullYear()}
+                    />
+                  </div>
+                </div>
+
+                {/* Journals */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-white/80 mb-2">
+                    <BookOpen size={16} className="text-cyan-300" />
+                    저널명
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="저널명 입력"
+                      value={journalInput}
+                      onChange={(e) => setJournalInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddJournal())}
+                      className="glossy-input px-3 py-2 flex-1"
+                    />
+                    <button
+                      onClick={handleAddJournal}
+                      className="glossy-btn px-3 py-2"
+                    >
+                      추가
+                    </button>
+                  </div>
+                  {tempFilters.journals && tempFilters.journals.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {tempFilters.journals.map((journal) => (
+                        <span
+                          key={journal}
+                          className="flex items-center gap-1 px-2 py-1 bg-cyan-500/20 text-cyan-200 rounded-full text-sm"
+                        >
+                          {journal}
+                          <button
+                            onClick={() => handleRemoveJournal(journal)}
+                            className="hover:bg-white/20 rounded-full p-0.5"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Authors */}
+                <div className="md:col-span-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-white/80 mb-2">
+                    <Users size={16} className="text-cyan-300" />
+                    저자명
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="저자명 입력 (예: Kim, Smith)"
+                      value={authorInput}
+                      onChange={(e) => setAuthorInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddAuthor())}
+                      className="glossy-input px-3 py-2 flex-1"
+                    />
+                    <button
+                      onClick={handleAddAuthor}
+                      className="glossy-btn px-3 py-2"
+                    >
+                      추가
+                    </button>
+                  </div>
+                  {tempFilters.authors && tempFilters.authors.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {tempFilters.authors.map((author) => (
+                        <span
+                          key={author}
+                          className="flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-200 rounded-full text-sm"
+                        >
+                          {author}
+                          <button
+                            onClick={() => handleRemoveAuthor(author)}
+                            className="hover:bg-white/20 rounded-full p-0.5"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter Actions */}
+              <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+                <button
+                  onClick={handleClearFilters}
+                  className="glossy-btn px-4 py-2 text-white/70"
+                >
+                  초기화
+                </button>
+                <button
+                  onClick={handleApplyFilters}
+                  className="glossy-btn-primary px-6 py-2"
+                >
+                  필터 적용
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Active Filters Display */}
+          {hasActiveFilters && !showFilters && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <span className="text-sm text-white/60">적용된 필터:</span>
+              {(filters.yearFrom || filters.yearTo) && (
+                <span className="px-2 py-1 bg-cyan-500/20 text-cyan-200 rounded-full text-sm flex items-center gap-1">
+                  <Calendar size={12} />
+                  {filters.yearFrom || '?'} ~ {filters.yearTo || '?'}
+                </span>
+              )}
+              {filters.journals?.map((j) => (
+                <span key={j} className="px-2 py-1 bg-cyan-500/20 text-cyan-200 rounded-full text-sm flex items-center gap-1">
+                  <BookOpen size={12} />
+                  {j}
+                </span>
+              ))}
+              {filters.authors?.map((a) => (
+                <span key={a} className="px-2 py-1 bg-green-500/20 text-green-200 rounded-full text-sm flex items-center gap-1">
+                  <Users size={12} />
+                  {a}
+                </span>
+              ))}
+              <button
+                onClick={handleClearFilters}
+                className="text-sm text-red-300 hover:text-red-200 flex items-center gap-1"
+              >
+                <X size={14} />
+                필터 초기화
+              </button>
+            </div>
+          )}
+
           <div className="space-y-4">
-            {data.results.map((paper: PaperSearchResult) => (
+            {currentPageResults.map((paper: PaperSearchResult) => (
               <PaperCard key={paper.pmid} paper={paper} />
             ))}
           </div>
@@ -232,6 +657,50 @@ export default function SearchPage() {
               검색 결과가 없습니다. 다른 키워드로 검색해보세요.
             </div>
           )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 mt-8 pt-6 border-t border-white/10">
+              <button
+                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 px-4 py-2 glossy-btn disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={18} />
+                이전
+              </button>
+
+              <div className="flex items-center gap-2">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`w-10 h-10 rounded-lg font-medium transition-all ${
+                      currentPage === page
+                        ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/30'
+                        : 'glossy-btn hover:scale-105'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="flex items-center gap-1 px-4 py-2 glossy-btn disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                다음
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+
+          {/* Info about total papers fetched */}
+          <div className="text-center mt-4 text-sm text-white/50">
+            총 {totalResults}개 논문 중 {startIndex + 1}-{Math.min(endIndex, totalResults)}번째 표시
+          </div>
         </div>
       )}
 
@@ -254,16 +723,9 @@ export default function SearchPage() {
             ].map((suggestion) => (
               <button
                 key={suggestion}
-                onClick={async () => {
+                onClick={() => {
                   setQuery(suggestion)
                   setSearchParams({ q: suggestion })
-                  if (containsKorean(suggestion)) {
-                    setIsKoreanSearch(true)
-                    await translateQuery(suggestion)
-                  } else {
-                    setIsKoreanSearch(false)
-                    setTranslatedQuery('')
-                  }
                 }}
                 className="glossy-btn px-4 py-2 text-sm hover:scale-105 transition-all"
               >
@@ -289,8 +751,31 @@ function PaperCard({ paper }: PaperCardProps) {
   const [showKorean, setShowKorean] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [pdfInfo, setPdfInfo] = useState<PDFInfo | null>(null)
+  const [isCheckingPdf, setIsCheckingPdf] = useState(false)
   const { isAuthenticated } = useAuthStore()
   const queryClient = useQueryClient()
+
+  // Check if paper is already saved
+  useEffect(() => {
+    const checkSaved = async () => {
+      if (!isAuthenticated) return
+      try {
+        const response = await fetch(`/api/v1/library/papers/check/${paper.pmid}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setIsSaved(data.is_saved)
+        }
+      } catch (error) {
+        console.error('Failed to check saved status:', error)
+      }
+    }
+    checkSaved()
+  }, [paper.pmid, isAuthenticated])
 
   // Handle save paper
   const handleSavePaper = async () => {
@@ -314,6 +799,32 @@ function PaperCard({ paper }: PaperCardProps) {
       alert('저장에 실패했습니다')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // Check PDF availability and download
+  const handlePdfClick = async () => {
+    // First check if PDF is available
+    if (!pdfInfo) {
+      setIsCheckingPdf(true)
+      try {
+        const info = await searchApi.getPdfInfo(paper.pmid)
+        setPdfInfo(info)
+
+        // If PDF is available, download it
+        if (info.hasPdf && info.pdfUrl) {
+          // Open PDF URL in new tab (PMC provides direct PDF links)
+          window.open(info.pdfUrl, '_blank')
+        }
+      } catch (error) {
+        console.error('Failed to check PDF availability:', error)
+        setPdfInfo({ pmid: paper.pmid, hasPdf: false, isOpenAccess: false })
+      } finally {
+        setIsCheckingPdf(false)
+      }
+    } else if (pdfInfo.hasPdf && pdfInfo.pdfUrl) {
+      // Already checked, open PDF URL
+      window.open(pdfInfo.pdfUrl, '_blank')
     }
   }
 
@@ -456,6 +967,41 @@ function PaperCard({ paper }: PaperCardProps) {
             <Bookmark size={16} />
           )}
           {isSaved ? '저장됨' : '저장'}
+        </button>
+        <button
+          onClick={handlePdfClick}
+          disabled={isCheckingPdf || (pdfInfo !== null && !pdfInfo.hasPdf)}
+          className={`flex items-center gap-1 text-sm transition-colors ${
+            pdfInfo?.hasPdf
+              ? 'text-green-300 hover:text-green-200'
+              : pdfInfo !== null
+                ? 'text-white/30 cursor-not-allowed'
+                : 'text-white/60 hover:text-green-300'
+          }`}
+          title={
+            pdfInfo?.hasPdf
+              ? 'PDF 다운로드 (Open Access)'
+              : pdfInfo !== null
+                ? 'PDF 미제공'
+                : 'PDF 확인'
+          }
+        >
+          {isCheckingPdf ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : pdfInfo?.hasPdf ? (
+            <FileDown size={16} />
+          ) : pdfInfo !== null ? (
+            <FileX size={16} />
+          ) : (
+            <FileDown size={16} />
+          )}
+          {isCheckingPdf
+            ? '확인 중...'
+            : pdfInfo?.hasPdf
+              ? 'PDF'
+              : pdfInfo !== null
+                ? '미제공'
+                : 'PDF'}
         </button>
       </div>
     </div>

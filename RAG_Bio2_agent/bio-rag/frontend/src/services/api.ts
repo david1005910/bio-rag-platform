@@ -10,6 +10,7 @@ import type {
   SavedPaper,
   HotTopic,
   KeywordTrend,
+  PDFInfo,
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
@@ -138,6 +139,35 @@ export const searchApi = {
     return response.data || []
   },
 
+  getPdfInfo: async (pmid: string): Promise<PDFInfo> => {
+    const response = await api.get(`/papers/${pmid}/pdf-info`)
+    return {
+      pmid: response.data.pmid,
+      pmcid: response.data.pmcid,
+      hasPdf: response.data.has_pdf,
+      pdfUrl: response.data.pdf_url,
+      isOpenAccess: response.data.is_open_access,
+    }
+  },
+
+  getPdfInfoBatch: async (pmids: string[]): Promise<PDFInfo[]> => {
+    const response = await api.post('/papers/pdf-info-batch', { pmids })
+    return response.data.papers.map((p: Record<string, unknown>) => ({
+      pmid: p.pmid,
+      pmcid: p.pmcid,
+      hasPdf: p.has_pdf,
+      pdfUrl: p.pdf_url,
+      isOpenAccess: p.is_open_access,
+    }))
+  },
+
+  downloadPdf: async (pmid: string): Promise<Blob> => {
+    const response = await api.get(`/papers/${pmid}/pdf`, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
+
   summarize: async (text: string, language: string = 'ko'): Promise<{ summary: string }> => {
     const response = await api.post('/summarize', { text, language })
     return {
@@ -253,6 +283,15 @@ export const libraryApi = {
 
 // ============== Trends API ==============
 
+export interface TrendAnalysis {
+  query: string
+  analysis: string
+  keyTrends: string[]
+  relatedTopics: string[]
+  researchDirection: string
+  summary: string
+}
+
 export const trendsApi = {
   getKeywordTrends: async (keywords: string[]): Promise<KeywordTrend[]> => {
     const params = new URLSearchParams()
@@ -264,6 +303,18 @@ export const trendsApi = {
   getHotTopics: async (limit: number = 10): Promise<HotTopic[]> => {
     const response = await api.get('/trends/hot', { params: { limit } })
     return response.data.topics
+  },
+
+  analyzeTrend: async (query: string, language: string = 'ko'): Promise<TrendAnalysis> => {
+    const response = await api.post('/trends/analyze', { query, language })
+    return {
+      query: response.data.query,
+      analysis: response.data.analysis,
+      keyTrends: response.data.key_trends,
+      relatedTopics: response.data.related_topics,
+      researchDirection: response.data.research_direction,
+      summary: response.data.summary,
+    }
   },
 }
 
