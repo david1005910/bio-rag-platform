@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Send, Loader2, BookOpen, RefreshCw } from 'lucide-react'
+import { Send, Loader2, BookOpen, RefreshCw, Database, Search } from 'lucide-react'
 import { chatApi } from '@/services/api'
 import { useChatStore } from '@/store/chatStore'
-import type { ChatMessage, ChatSource } from '@/types'
+import type { ChatMessage } from '@/types'
+
+interface ExtendedChatMessage extends ChatMessage {
+  vectordbUsed?: boolean
+  searchMode?: string
+}
 
 export default function ChatPage() {
   const [input, setInput] = useState('')
+  const [useVectordb, setUseVectordb] = useState(true)
+  const [searchMode, setSearchMode] = useState<'hybrid' | 'dense' | 'sparse'>('hybrid')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const {
     messages,
@@ -27,17 +34,22 @@ export default function ChatPage() {
 
   const queryMutation = useMutation({
     mutationFn: (question: string) =>
-      chatApi.query(question, currentSessionId || undefined),
+      chatApi.query(question, currentSessionId || undefined, undefined, {
+        useVectordb,
+        searchMode,
+      }),
     onMutate: () => {
       setLoading(true)
     },
     onSuccess: (data) => {
-      const assistantMessage: ChatMessage = {
+      const assistantMessage: ExtendedChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
         content: data.answer,
         sources: data.sources,
         createdAt: new Date().toISOString(),
+        vectordbUsed: data.vectordbUsed,
+        searchMode: data.searchMode,
       }
       addMessage(assistantMessage)
       setLoading(false)
@@ -71,33 +83,66 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-12rem)]">
+    <div className="flex flex-col h-[calc(100vh-12rem)] mx-4">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 bg-white">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">AI 논문 Q&A</h1>
-          <p className="text-sm text-gray-500">
-            바이오메디컬 연구에 관한 질문을 하세요
-          </p>
+      <div className="glossy-panel px-6 py-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-xl font-bold liquid-text">AI 논문 Q&A</h1>
+            <p className="text-sm liquid-text-muted">
+              바이오메디컬 연구에 관한 질문을 하세요
+            </p>
+          </div>
+          <button
+            onClick={clearMessages}
+            className="glossy-btn flex items-center gap-2 px-3 py-2 text-sm"
+          >
+            <RefreshCw size={16} />
+            새 대화
+          </button>
         </div>
-        <button
-          onClick={clearMessages}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-        >
-          <RefreshCw size={16} />
-          새 대화
-        </button>
+
+        {/* VectorDB Controls */}
+        <div className="flex items-center gap-4 pt-3 border-t border-white/10">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useVectordb}
+              onChange={(e) => setUseVectordb(e.target.checked)}
+              className="w-4 h-4 rounded accent-cyan-500"
+            />
+            <Database size={16} className={useVectordb ? 'text-cyan-400' : 'text-white/40'} />
+            <span className={`text-sm ${useVectordb ? 'text-cyan-300' : 'text-white/50'}`}>
+              VectorDB 검색
+            </span>
+          </label>
+
+          {useVectordb && (
+            <div className="flex items-center gap-2">
+              <Search size={14} className="text-white/50" />
+              <select
+                value={searchMode}
+                onChange={(e) => setSearchMode(e.target.value as 'hybrid' | 'dense' | 'sparse')}
+                className="glossy-input px-2 py-1 text-sm rounded"
+              >
+                <option value="hybrid">Hybrid (Dense + Sparse)</option>
+                <option value="dense">Dense (Qdrant)</option>
+                <option value="sparse">Sparse (SPLADE)</option>
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 glossy-panel-sm mb-4">
         {messages.length === 0 && (
           <div className="text-center py-16">
-            <BookOpen className="mx-auto text-gray-300 mb-4" size={64} />
-            <h3 className="text-xl font-medium text-gray-600 mb-2">
+            <BookOpen className="mx-auto text-white/30 mb-4" size={64} />
+            <h3 className="text-xl font-medium liquid-text mb-2">
               무엇이든 물어보세요
             </h3>
-            <p className="text-gray-500 max-w-md mx-auto mb-8">
+            <p className="liquid-text-muted max-w-md mx-auto mb-8">
               예시: "CRISPR-Cas9의 off-target 효과를 줄이는 최신 방법은?"
             </p>
             <div className="flex flex-wrap gap-2 justify-center max-w-2xl mx-auto">
@@ -109,7 +154,7 @@ export default function ChatPage() {
                 <button
                   key={suggestion}
                   onClick={() => setInput(suggestion)}
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-full text-sm text-gray-600 hover:border-primary-300 hover:text-primary-600 transition-colors"
+                  className="glossy-btn px-4 py-2 text-sm hover:scale-105 transition-all"
                 >
                   {suggestion}
                 </button>
@@ -124,8 +169,8 @@ export default function ChatPage() {
 
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-white rounded-2xl rounded-tl-none px-6 py-4 shadow-sm">
-              <div className="flex items-center gap-2 text-gray-500">
+            <div className="glossy-panel-sm px-6 py-4">
+              <div className="flex items-center gap-2 liquid-text-muted">
                 <Loader2 className="animate-spin" size={18} />
                 답변 생성 중...
               </div>
@@ -137,20 +182,20 @@ export default function ChatPage() {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-200 bg-white">
+      <div className="glossy-panel p-4">
         <form onSubmit={handleSubmit} className="flex gap-4">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="질문을 입력하세요..."
-            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="glossy-input flex-1 px-4 py-3"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="glossy-btn-primary px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send size={20} />
           </button>
@@ -160,40 +205,112 @@ export default function ChatPage() {
   )
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message }: { message: ExtendedChatMessage }) {
   const isUser = message.role === 'user'
+
+  // Simple markdown-like rendering for AI responses
+  const renderContent = (content: string) => {
+    if (isUser) {
+      return <p className="whitespace-pre-wrap text-white">{content}</p>
+    }
+
+    // Process markdown-like formatting for AI responses
+    const lines = content.split('\n')
+    return (
+      <div className="space-y-3 text-white/90">
+        {lines.map((line, idx) => {
+          // Bold text: **text**
+          const processedLine = line.replace(
+            /\*\*(.+?)\*\*/g,
+            '<strong class="text-white font-semibold">$1</strong>'
+          )
+
+          // Numbered list items
+          if (/^\d+\.\s/.test(line)) {
+            return (
+              <div
+                key={idx}
+                className="pl-4 border-l-2 border-cyan-400/50"
+                dangerouslySetInnerHTML={{ __html: processedLine }}
+              />
+            )
+          }
+
+          // Empty lines
+          if (!line.trim()) {
+            return <div key={idx} className="h-2" />
+          }
+
+          // Regular paragraphs
+          return (
+            <p
+              key={idx}
+              className="leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: processedLine }}
+            />
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-3xl ${
+        className={`max-w-3xl px-6 py-4 ${
           isUser
-            ? 'bg-primary-600 text-white rounded-2xl rounded-tr-none'
-            : 'bg-white text-gray-800 rounded-2xl rounded-tl-none shadow-sm'
-        } px-6 py-4`}
+            ? 'glossy-btn-primary rounded-2xl rounded-tr-none'
+            : 'glossy-panel rounded-2xl rounded-tl-none'
+        }`}
       >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {/* Main content */}
+        {renderContent(message.content)}
 
+        {/* VectorDB indicator */}
+        {!isUser && message.vectordbUsed && (
+          <div className="mt-3 flex items-center gap-2 text-xs">
+            <Database size={12} className="text-cyan-400" />
+            <span className="text-cyan-300">
+              VectorDB 검색 사용 ({message.searchMode === 'hybrid' ? 'Hybrid' : message.searchMode === 'dense' ? 'Dense' : 'Sparse'})
+            </span>
+          </div>
+        )}
+
+        {/* Sources section */}
         {message.sources && message.sources.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <p className="text-sm font-medium text-gray-700 mb-2">참고 문헌:</p>
-            <div className="space-y-2">
-              {message.sources.map((source: ChatSource, index: number) => (
+          <details className="mt-4 pt-4 border-t border-white/20">
+            <summary className="text-sm font-medium text-cyan-300 cursor-pointer hover:text-cyan-200 transition-colors">
+              📚 참고 문헌 ({message.sources.length}개)
+              {message.vectordbUsed && <span className="ml-2 text-xs text-cyan-400/70">[VectorDB]</span>}
+            </summary>
+            <div className="space-y-2 mt-3">
+              {message.sources.map((source: any, index: number) => (
                 <div
                   key={source.pmid}
-                  className="text-sm bg-gray-50 p-3 rounded-lg"
+                  className="text-sm bg-white/10 p-3 rounded-xl border border-white/10"
                 >
-                  <div className="font-medium text-gray-800">
+                  <div className="font-medium text-white flex items-center gap-2">
                     [{index + 1}] PMID: {source.pmid}
+                    {source.sourceType === 'vectordb' && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded">
+                        VectorDB
+                      </span>
+                    )}
                   </div>
-                  <div className="text-gray-600">{source.title}</div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    관련도: {Math.round(source.relevance * 100)}%
+                  <div className="text-white/70 text-xs mt-1">{source.title}</div>
+                  <div className="text-xs text-white/50 mt-1 flex flex-wrap gap-3">
+                    <span className="text-cyan-300">Hybrid: {source.relevance.toFixed(2)} <span className="text-white/40">(가중 평균)</span></span>
+                    {source.denseScore !== undefined && source.denseScore !== null && (
+                      <span className="text-blue-300">Dense: {source.denseScore.toFixed(2)} <span className="text-white/40">(의미적 유사도)</span></span>
+                    )}
+                    {source.sparseScore !== undefined && source.sparseScore !== null && (
+                      <span className="text-green-300">Sparse: {source.sparseScore.toFixed(2)} <span className="text-white/40">(키워드 매칭)</span></span>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </details>
         )}
       </div>
     </div>

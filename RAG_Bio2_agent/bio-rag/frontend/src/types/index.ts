@@ -79,6 +79,7 @@ export interface SavedPaper {
   pmid: string
   title: string
   abstract: string
+  journal?: string
   tags: string[]
   notes?: string
   savedAt: string
