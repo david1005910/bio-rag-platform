@@ -308,9 +308,30 @@ export interface VectorSearchResponse {
   search_mode: string
 }
 
+export interface VectorDBPaper {
+  id: string
+  pmid: string
+  title: string
+  abstract: string
+  journal?: string
+  authors: string[]
+  keywords: string[]
+  indexed_at?: string
+}
+
+export interface VectorDBPapersResponse {
+  papers: VectorDBPaper[]
+  total: number
+}
+
 export const vectordbApi = {
   savePapers: async (papers: PaperForVectorDB[]): Promise<SavePapersResponse> => {
     const response = await api.post('/vectordb/papers/save', { papers })
+    return response.data
+  },
+
+  getPapers: async (): Promise<VectorDBPapersResponse> => {
+    const response = await api.get('/vectordb/papers')
     return response.data
   },
 

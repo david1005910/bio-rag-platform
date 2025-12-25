@@ -715,6 +715,36 @@ class HybridVectorStore:
             "status": "ready"
         }
 
+    def get_papers(self) -> List[dict]:
+        """Get all papers stored in VectorDB"""
+        papers = {}
+        for doc in self.documents:
+            metadata = doc.get("metadata", {})
+            pmid = metadata.get("pmid", "")
+            if pmid and pmid not in papers:
+                # Handle authors - can be list or comma-separated string
+                authors = metadata.get("authors", [])
+                if isinstance(authors, str):
+                    authors = [a.strip() for a in authors.split(",") if a.strip()]
+
+                # Handle keywords - can be list or comma-separated string
+                keywords = metadata.get("keywords", [])
+                if isinstance(keywords, str):
+                    keywords = [k.strip() for k in keywords.split(",") if k.strip()]
+
+                papers[pmid] = {
+                    "id": doc["id"],
+                    "pmid": pmid,
+                    "title": metadata.get("title", "Untitled"),
+                    "abstract": doc.get("text", "")[:500],
+                    "journal": metadata.get("journal", ""),
+                    "authors": authors,
+                    "keywords": keywords,
+                    "indexed_at": metadata.get("indexed_at", ""),
+                    "section": metadata.get("section", "abstract")
+                }
+        return list(papers.values())
+
     def clear(self):
         """Clear all documents"""
         self.documents = []
@@ -855,6 +885,42 @@ async def get_vectordb_stats():
         vectors_count=stats["vectors_count"],
         status=stats["status"],
         search_mode=stats["search_mode"]
+    )
+
+
+class VectorDBPaper(BaseModel):
+    """Paper stored in VectorDB"""
+    id: str
+    pmid: str
+    title: str
+    abstract: str
+    journal: Optional[str] = None
+    authors: List[str] = []
+    keywords: List[str] = []
+    indexed_at: Optional[str] = None
+
+
+class VectorDBPapersResponse(BaseModel):
+    """Response for listing VectorDB papers"""
+    papers: List[VectorDBPaper]
+    total: int
+
+
+@router.get("/papers", response_model=VectorDBPapersResponse)
+async def get_vectordb_papers():
+    """
+    Get all papers stored in VectorDB
+
+    - Returns list of indexed papers
+    - Each paper includes metadata (pmid, title, abstract, etc.)
+    - Used for library page to show indexed papers
+    """
+    vector_store = get_vector_store()
+    papers = vector_store.get_papers()
+
+    return VectorDBPapersResponse(
+        papers=[VectorDBPaper(**p) for p in papers],
+        total=len(papers)
     )
 
 
