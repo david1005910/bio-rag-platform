@@ -83,3 +83,10 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Backend data (user data, library, vector database)
+backend/data/
+
+# Frontend test files
+frontend/test-*.mjs
+frontend/*.png
