@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4"
 
     # Embedding Model
-    EMBEDDING_MODEL: str = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
-    EMBEDDING_DIMENSION: int = 768
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
 
     # Security
     JWT_SECRET_KEY: str = "your-super-secret-key-change-in-production"
