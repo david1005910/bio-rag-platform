@@ -919,7 +919,7 @@ def get_vector_store() -> HybridVectorStore:
 
 # ============== Text Chunking ==============
 
-def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
     """Split text into overlapping chunks"""
     if not text:
         return []

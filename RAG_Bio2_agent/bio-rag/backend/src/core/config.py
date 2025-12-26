@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     PUBMED_RATE_LIMIT: int = 10  # requests per second
 
     # Chunking
-    CHUNK_SIZE: int = 1000
+    CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 100
 
     class Config:
