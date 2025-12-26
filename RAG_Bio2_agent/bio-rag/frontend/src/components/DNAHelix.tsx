@@ -49,12 +49,14 @@ interface DNA3DHelixProps {
 }
 
 function DNA3DHelix({ delay }: DNA3DHelixProps) {
-  const nucleotides = 20 // Number of nucleotide pairs
-  const helixHeight = 600
-  const helixRadius = 40
+  const nucleotides = 24 // Number of nucleotide pairs (increased for smoother helix)
+  const helixHeight = 650
+  const helixRadius = 50 // Radius of the circular helix (constant)
   const verticalSpacing = helixHeight / nucleotides
+  const containerWidth = helixRadius * 2 + 40 // Container width to fit the circular helix
+  const centerX = containerWidth / 2 // Center of the circular helix
 
-  // Base pair colors
+  // Base pair colors - vibrant for visibility
   const basePairs = [
     { left: '#ef4444', right: '#22c55e', label: 'A-T' }, // Adenine-Thymine (Red-Green)
     { left: '#3b82f6', right: '#eab308', label: 'G-C' }, // Guanine-Cytosine (Blue-Yellow)
@@ -64,27 +66,46 @@ function DNA3DHelix({ delay }: DNA3DHelixProps) {
     <div
       className="dna-3d-helix"
       style={{
-        width: `${helixRadius * 3}px`,
+        width: `${containerWidth}px`,
         height: `${helixHeight}px`,
         position: 'relative',
         transformStyle: 'preserve-3d',
-        animation: `dna-spin 15s linear ${delay}s infinite`,
+        animation: `dna-spin 12s linear ${delay}s infinite`,
       }}
     >
       {Array.from({ length: nucleotides }).map((_, i) => {
-        const angle = (i / nucleotides) * Math.PI * 4 // 2 full rotations
+        // Circular helix: both strands rotate around the central axis
+        // maintaining constant radius (true cylindrical helix)
+        const angle = (i / nucleotides) * Math.PI * 3 // 1.5 full rotations for smoother look
         const y = i * verticalSpacing
         const pair = basePairs[i % 2]
 
-        // Calculate 3D positions for helix
-        const leftX = Math.cos(angle) * helixRadius + helixRadius * 1.5
+        // Calculate positions on a circle (constant radius from center)
+        // Left strand: angle
+        // Right strand: angle + PI (opposite side of the circle)
+        const leftX = centerX + Math.cos(angle) * helixRadius
         const leftZ = Math.sin(angle) * helixRadius
-        const rightX = Math.cos(angle + Math.PI) * helixRadius + helixRadius * 1.5
+        const rightX = centerX + Math.cos(angle + Math.PI) * helixRadius
         const rightZ = Math.sin(angle + Math.PI) * helixRadius
 
-        // Opacity based on Z position (depth effect)
-        const leftOpacity = 0.5 + (leftZ / helixRadius) * 0.5
-        const rightOpacity = 0.5 + (rightZ / helixRadius) * 0.5
+        // Next position for backbone connection
+        const nextAngle = ((i + 1) / nucleotides) * Math.PI * 3
+        const nextLeftX = centerX + Math.cos(nextAngle) * helixRadius
+        const nextRightX = centerX + Math.cos(nextAngle + Math.PI) * helixRadius
+
+        // Opacity and scale based on Z position (depth effect)
+        // Front (positive Z) = brighter, larger
+        // Back (negative Z) = dimmer, smaller
+        const leftDepthFactor = (leftZ + helixRadius) / (helixRadius * 2) // 0 to 1
+        const rightDepthFactor = (rightZ + helixRadius) / (helixRadius * 2) // 0 to 1
+
+        const leftOpacity = 0.4 + leftDepthFactor * 0.6
+        const rightOpacity = 0.4 + rightDepthFactor * 0.6
+
+        const leftScale = 0.7 + leftDepthFactor * 0.5
+        const rightScale = 0.7 + rightDepthFactor * 0.5
+
+        const sphereSize = 20
 
         return (
           <div key={i} style={{ position: 'absolute', width: '100%', height: '100%' }}>
@@ -93,16 +114,16 @@ function DNA3DHelix({ delay }: DNA3DHelixProps) {
               className="nucleotide-sphere"
               style={{
                 position: 'absolute',
-                left: `${leftX - 12}px`,
+                left: `${leftX - (sphereSize * leftScale) / 2}px`,
                 top: `${y}px`,
-                width: '24px',
-                height: '24px',
+                width: `${sphereSize * leftScale}px`,
+                height: `${sphereSize * leftScale}px`,
                 borderRadius: '50%',
-                background: `radial-gradient(circle at 30% 30%, ${pair.left}, ${pair.left}88 60%, ${pair.left}44)`,
-                boxShadow: `0 0 20px ${pair.left}80, inset 0 -5px 15px rgba(0,0,0,0.3)`,
+                background: `radial-gradient(circle at 35% 35%, white, ${pair.left} 40%, ${pair.left}88 70%, ${pair.left}44)`,
+                boxShadow: `0 0 ${15 * leftScale}px ${pair.left}90, inset 0 -3px 10px rgba(0,0,0,0.4)`,
                 opacity: leftOpacity,
-                transform: `translateZ(${leftZ}px)`,
-                animation: `nucleotide-pulse 2s ease-in-out ${delay + i * 0.1}s infinite`,
+                zIndex: Math.round(leftZ + helixRadius),
+                animation: `nucleotide-pulse 2.5s ease-in-out ${delay + i * 0.08}s infinite`,
               }}
             />
 
@@ -111,20 +132,20 @@ function DNA3DHelix({ delay }: DNA3DHelixProps) {
               className="nucleotide-sphere"
               style={{
                 position: 'absolute',
-                left: `${rightX - 12}px`,
+                left: `${rightX - (sphereSize * rightScale) / 2}px`,
                 top: `${y}px`,
-                width: '24px',
-                height: '24px',
+                width: `${sphereSize * rightScale}px`,
+                height: `${sphereSize * rightScale}px`,
                 borderRadius: '50%',
-                background: `radial-gradient(circle at 30% 30%, ${pair.right}, ${pair.right}88 60%, ${pair.right}44)`,
-                boxShadow: `0 0 20px ${pair.right}80, inset 0 -5px 15px rgba(0,0,0,0.3)`,
+                background: `radial-gradient(circle at 35% 35%, white, ${pair.right} 40%, ${pair.right}88 70%, ${pair.right}44)`,
+                boxShadow: `0 0 ${15 * rightScale}px ${pair.right}90, inset 0 -3px 10px rgba(0,0,0,0.4)`,
                 opacity: rightOpacity,
-                transform: `translateZ(${rightZ}px)`,
-                animation: `nucleotide-pulse 2s ease-in-out ${delay + i * 0.1 + 0.5}s infinite`,
+                zIndex: Math.round(rightZ + helixRadius),
+                animation: `nucleotide-pulse 2.5s ease-in-out ${delay + i * 0.08 + 0.4}s infinite`,
               }}
             />
 
-            {/* Hydrogen bond (connecting line) */}
+            {/* Hydrogen bond (connecting line between base pairs) */}
             <svg
               style={{
                 position: 'absolute',
@@ -133,23 +154,24 @@ function DNA3DHelix({ delay }: DNA3DHelixProps) {
                 width: '100%',
                 height: '100%',
                 overflow: 'visible',
+                zIndex: Math.round((leftZ + rightZ) / 2 + helixRadius) - 1,
               }}
             >
               <line
                 x1={leftX}
-                y1={y + 12}
+                y1={y + (sphereSize * leftScale) / 2}
                 x2={rightX}
-                y2={y + 12}
-                stroke="rgba(255,255,255,0.4)"
+                y2={y + (sphereSize * rightScale) / 2}
+                stroke="rgba(255,255,255,0.5)"
                 strokeWidth="2"
-                strokeDasharray="4,4"
+                strokeDasharray="6,4"
                 style={{
-                  filter: 'drop-shadow(0 0 3px rgba(255,255,255,0.5))',
+                  filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.6))',
                 }}
               />
             </svg>
 
-            {/* Backbone connections (vertical lines) */}
+            {/* Backbone connections (curved lines connecting nucleotides) */}
             {i < nucleotides - 1 && (
               <svg
                 style={{
@@ -161,27 +183,29 @@ function DNA3DHelix({ delay }: DNA3DHelixProps) {
                   overflow: 'visible',
                 }}
               >
-                {/* Left backbone */}
+                {/* Left backbone - gradient tube effect */}
                 <line
                   x1={leftX}
-                  y1={y + 12}
-                  x2={Math.cos(((i + 1) / nucleotides) * Math.PI * 4) * helixRadius + helixRadius * 1.5}
-                  y2={(i + 1) * verticalSpacing + 12}
+                  y1={y + (sphereSize * leftScale) / 2}
+                  x2={nextLeftX}
+                  y2={(i + 1) * verticalSpacing + (sphereSize * leftScale) / 2}
                   stroke="url(#backboneGradientLeft)"
-                  strokeWidth="4"
+                  strokeWidth={4 * leftScale}
                   strokeLinecap="round"
-                  opacity={leftOpacity * 0.8}
+                  opacity={leftOpacity * 0.9}
+                  style={{ zIndex: Math.round(leftZ + helixRadius) - 2 }}
                 />
-                {/* Right backbone */}
+                {/* Right backbone - gradient tube effect */}
                 <line
                   x1={rightX}
-                  y1={y + 12}
-                  x2={Math.cos(((i + 1) / nucleotides) * Math.PI * 4 + Math.PI) * helixRadius + helixRadius * 1.5}
-                  y2={(i + 1) * verticalSpacing + 12}
+                  y1={y + (sphereSize * rightScale) / 2}
+                  x2={nextRightX}
+                  y2={(i + 1) * verticalSpacing + (sphereSize * rightScale) / 2}
                   stroke="url(#backboneGradientRight)"
-                  strokeWidth="4"
+                  strokeWidth={4 * rightScale}
                   strokeLinecap="round"
-                  opacity={rightOpacity * 0.8}
+                  opacity={rightOpacity * 0.9}
+                  style={{ zIndex: Math.round(rightZ + helixRadius) - 2 }}
                 />
               </svg>
             )}

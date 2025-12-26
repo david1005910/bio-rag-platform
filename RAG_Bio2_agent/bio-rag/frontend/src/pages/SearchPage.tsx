@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, Filter, ExternalLink, MessageSquare, Bookmark, BookmarkCheck, Languages, Loader2, Database, CheckCircle, X, Calendar, BookOpen, Users, TrendingUp, ChevronLeft, ChevronRight, FileDown, FileX } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { searchApi, libraryApi, vectordbApi } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
+import { useSearchStore } from '@/store/searchStore'
 import type { PaperSearchResult, PDFInfo } from '@/types'
 
 // Simple Korean detection
@@ -51,26 +52,59 @@ const TOTAL_FETCH_LIMIT = 50
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [query, setQuery] = useState(searchParams.get('q') || '')
+  const navigate = useNavigate()
+
+  // Zustand store for persisting search state across navigation
+  const {
+    lastQuery,
+    lastFilters,
+    currentPage: storedPage,
+    autoSavedQuery: storedAutoSavedQuery,
+    setLastSearch,
+    setCurrentPage: setStoredPage,
+    setAutoSavedQuery: setStoredAutoSavedQuery,
+  } = useSearchStore()
+
+  // Initialize from URL params, or fall back to stored state
+  const urlQuery = searchParams.get('q')
+  const initialQuery = urlQuery || lastQuery || ''
+
+  const [query, setQuery] = useState(initialQuery)
   const [isSavingToVectorDB, setIsSavingToVectorDB] = useState(false)
   const [vectorDBSaveResult, setVectorDBSaveResult] = useState<{ saved: number; chunks: number } | null>(null)
-  const [autoSavedQuery, setAutoSavedQuery] = useState<string | null>(null) // Track which query was auto-saved
+  const [autoSavedQuery, setAutoSavedQuery] = useState<string | null>(storedAutoSavedQuery)
 
-  // Pagination state - initialize from URL
+  // Pagination state - initialize from URL or store
   const [currentPage, setCurrentPage] = useState(() => {
     const pageParam = searchParams.get('page')
-    return pageParam ? parseInt(pageParam) : 1
+    return pageParam ? parseInt(pageParam) : storedPage || 1
   })
 
-  // Filter state - initialize from URL
+  // Filter state - initialize from URL or store
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState<SearchFilters>(() => parseFiltersFromUrl(searchParams))
-  const [tempFilters, setTempFilters] = useState<SearchFilters>(() => parseFiltersFromUrl(searchParams))
+  const urlFilters = parseFiltersFromUrl(searchParams)
+  const hasUrlFilters = Object.keys(urlFilters).length > 0
+  const initialFilters = hasUrlFilters ? urlFilters : lastFilters || {}
+
+  const [filters, setFilters] = useState<SearchFilters>(initialFilters)
+  const [tempFilters, setTempFilters] = useState<SearchFilters>(initialFilters)
   const [journalInput, setJournalInput] = useState('')
   const [authorInput, setAuthorInput] = useState('')
 
-  // Get search term from URL params
-  const searchTerm = searchParams.get('q') || ''
+  // Restore URL from store if URL has no query but store has one
+  useEffect(() => {
+    if (!urlQuery && lastQuery) {
+      const filterParams = filtersToUrlParams(lastFilters)
+      const newParams: Record<string, string> = { q: lastQuery, ...filterParams }
+      if (storedPage > 1) {
+        newParams.page = storedPage.toString()
+      }
+      setSearchParams(newParams, { replace: true })
+    }
+  }, []) // Run only on mount
+
+  // Get search term - use URL first, then stored
+  const searchTerm = urlQuery || lastQuery || ''
   const isKoreanSearch = containsKorean(searchTerm)
 
   // Use React Query for translation (with caching)
@@ -172,6 +206,27 @@ export default function SearchPage() {
 
     autoSaveToVectorDB()
   }, [data, searchTerm, translatedQuery, isKoreanSearch, isSavingToVectorDB, autoSavedQuery])
+
+  // Save search state to store when results arrive (for persistence across navigation)
+  useEffect(() => {
+    if (data?.results && searchTerm) {
+      setLastSearch(searchTerm, data.results, filters)
+    }
+  }, [data, searchTerm, filters, setLastSearch])
+
+  // Sync autoSavedQuery with store
+  useEffect(() => {
+    if (autoSavedQuery !== storedAutoSavedQuery) {
+      setStoredAutoSavedQuery(autoSavedQuery)
+    }
+  }, [autoSavedQuery, storedAutoSavedQuery, setStoredAutoSavedQuery])
+
+  // Sync current page with store
+  useEffect(() => {
+    if (currentPage !== storedPage) {
+      setStoredPage(currentPage)
+    }
+  }, [currentPage, storedPage, setStoredPage])
 
   // Calculate pagination
   const totalResults = data?.results?.length || 0

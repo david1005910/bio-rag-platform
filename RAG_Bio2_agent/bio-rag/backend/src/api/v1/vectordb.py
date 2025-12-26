@@ -1120,6 +1120,38 @@ async def get_vectordb_papers():
     )
 
 
+@router.get("/metadata", response_model=VectorDBPapersResponse)
+async def get_vectordb_metadata():
+    """
+    Get all papers from metadata store (full metadata)
+
+    - Returns papers with COMPLETE abstract and ALL authors
+    - Data is auto-saved when papers are indexed to VectorDB
+    - Used for "저장된 Meta 데이터" tab
+    """
+    metadata_papers = vectordb_metadata_store.get_all_papers()
+
+    papers = []
+    for p in metadata_papers:
+        pmid = p.get("pmid", "")
+        if pmid:
+            papers.append({
+                "id": pmid,
+                "pmid": pmid,
+                "title": p.get("title", "Untitled"),
+                "abstract": p.get("abstract", ""),
+                "journal": p.get("journal", ""),
+                "authors": p.get("authors", []),
+                "keywords": p.get("keywords", []),
+                "indexed_at": p.get("indexed_at", "")
+            })
+
+    return VectorDBPapersResponse(
+        papers=[VectorDBPaper(**p) for p in papers],
+        total=len(papers)
+    )
+
+
 @router.post("/search", response_model=SearchVectorDBResponse)
 async def search_vectordb(request: SearchVectorDBRequest):
     """

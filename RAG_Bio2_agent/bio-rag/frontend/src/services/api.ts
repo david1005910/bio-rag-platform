@@ -386,6 +386,11 @@ export const vectordbApi = {
     return response.data
   },
 
+  getMetadata: async (): Promise<VectorDBPapersResponse> => {
+    const response = await api.get('/vectordb/metadata')
+    return response.data
+  },
+
   getStats: async (): Promise<VectorDBStats> => {
     const response = await api.get('/vectordb/stats')
     return response.data

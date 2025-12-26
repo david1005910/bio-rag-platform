@@ -14,11 +14,25 @@ export default function LibraryPage() {
   const [activeTab, setActiveTab] = useState<TabType>('vectordb')
   const queryClient = useQueryClient()
 
-  const { data: papersData, isLoading } = useQuery({
-    queryKey: ['savedPapers', selectedTag],
-    queryFn: () => libraryApi.getSavedPapers(selectedTag || undefined),
-    enabled: isAuthenticated && activeTab === 'saved',
+  // 저장된 Meta 데이터 - vectordb_metadata.json에서 자동 저장된 전체 메타데이터
+  const { data: metadataResponse, isLoading } = useQuery({
+    queryKey: ['vectordbMetadata'],
+    queryFn: () => vectordbApi.getMetadata(),
+    enabled: activeTab === 'saved',
   })
+
+  // Convert metadata to SavedPaper format for compatibility
+  const papersData = metadataResponse?.papers?.map(p => ({
+    id: p.pmid,
+    pmid: p.pmid,
+    title: p.title,
+    abstract: p.abstract,
+    authors: p.authors,
+    journal: p.journal || '',
+    tags: [],
+    notes: undefined,
+    saved_at: p.indexed_at
+  }))
 
   const { data: vectordbPapers, isLoading: isLoadingVectorDB } = useQuery({
     queryKey: ['vectordbPapers'],
@@ -26,11 +40,8 @@ export default function LibraryPage() {
     enabled: activeTab === 'vectordb',
   })
 
-  const { data: tags } = useQuery({
-    queryKey: ['tags'],
-    queryFn: () => libraryApi.getTags(),
-    enabled: isAuthenticated && activeTab === 'saved',
-  })
+  // Tags are not used for auto-saved metadata (no user tags)
+  const tags: string[] = []
 
   const deleteMutation = useMutation({
     mutationFn: (paperId: string) => libraryApi.deleteSavedPaper(paperId),
@@ -46,8 +57,8 @@ export default function LibraryPage() {
     }
   }
 
-  // Show login prompt only for saved papers tab when not authenticated
-  const showLoginPrompt = !isAuthenticated && activeTab === 'saved'
+  // No login required for auto-saved metadata
+  const showLoginPrompt = false
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
