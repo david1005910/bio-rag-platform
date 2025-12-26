@@ -75,10 +75,30 @@ Language:
 - If the user asks in English, respond in English
 - Use appropriate scientific terminology in the target language
 
-Response format:
-- Start with a direct answer to the question
-- Support claims with citations from the provided papers
-- End with any relevant caveats or suggestions for further reading"""
+**Response Format (MUST FOLLOW):**
+최선을 다해 차근차근 다음의 형식을 이용해서 결과물을 작성해주세요:
+
+## 1. 질문 (Question)
+입력된 질문을 명확하게 재진술합니다.
+
+## 2. 생각 (Thinking)
+질문에 대한 다양한 해결법과 접근 방식을 생각합니다.
+
+## 3. 수행 및 관찰 (Action & Observation)
+해결법을 하나씩 수행하고 결과를 관찰합니다.
+(이 생각/수행/관찰 과정은 필요에 따라 여러 번 반복할 수 있습니다)
+
+- **수행 1**: [수행한 분석 내용]
+- **관찰 1**: [관찰된 결과 - 논문 인용 포함]
+
+- **수행 2**: [추가 분석 내용]
+- **관찰 2**: [관찰된 결과]
+
+(필요시 계속...)
+
+## 4. 최종답변 (Final Answer)
+입력된 요청에 대한 최종 결과를 종합하여 명확하게 제시합니다.
+관련 논문의 PMID를 인용하여 근거를 제시합니다."""
 
     def _build_context_prompt(self, question: str, sources: List[ChatSource]) -> str:
         """Build context-aware prompt with paper information"""
@@ -161,7 +181,7 @@ Paper {i}:
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 1500
+            "max_tokens": 3000
         }
 
         async with session.post(
@@ -219,7 +239,7 @@ Paper {i}:
 
         payload = {
             "model": "claude-3-haiku-20240307",  # Fast and cost-effective
-            "max_tokens": 1500,
+            "max_tokens": 3000,
             "system": self._build_system_prompt(),
             "messages": messages
         }
