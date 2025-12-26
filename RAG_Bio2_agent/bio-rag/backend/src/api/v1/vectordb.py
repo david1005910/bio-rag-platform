@@ -18,6 +18,7 @@ import aiohttp
 import numpy as np
 
 from src.core.config import settings
+from src.data.vectordb_metadata_store import vectordb_metadata_store
 
 logger = logging.getLogger(__name__)
 
@@ -989,9 +990,24 @@ async def save_papers_to_vectordb(request: SavePapersRequest):
             metadatas=all_metadatas
         )
 
+    # Save full metadata to metadata store (with complete abstract and all authors)
+    metadata_papers = [
+        {
+            "pmid": paper.pmid,
+            "title": paper.title,
+            "abstract": paper.abstract,
+            "authors": paper.authors,
+            "journal": paper.journal,
+            "publication_date": paper.publication_date,
+            "keywords": paper.keywords
+        }
+        for paper in request.papers
+    ]
+    vectordb_metadata_store.save_papers_batch(metadata_papers)
+
     took_ms = int((time.time() - start_time) * 1000)
 
-    logger.info(f"Saved {len(request.papers)} papers ({len(all_texts)} chunks) to VectorDB in {took_ms}ms")
+    logger.info(f"Saved {len(request.papers)} papers ({len(all_texts)} chunks) to VectorDB + metadata in {took_ms}ms")
 
     return SavePapersResponse(
         saved_count=len(request.papers),
@@ -1051,12 +1067,52 @@ async def get_vectordb_papers():
     """
     Get all papers stored in VectorDB
 
-    - Returns list of indexed papers
-    - Each paper includes metadata (pmid, title, abstract, etc.)
+    - Returns list of indexed papers with FULL metadata
+    - Uses metadata store for complete abstract and all authors
+    - Falls back to vector store if metadata not available
     - Used for library page to show indexed papers
     """
+    # Get full metadata from metadata store
+    metadata_papers = vectordb_metadata_store.get_all_papers()
+
+    # Also get papers from vector store (for any not in metadata)
     vector_store = get_vector_store()
-    papers = vector_store.get_papers()
+    vector_papers = vector_store.get_papers()
+
+    # Create a merged dictionary (metadata store takes priority)
+    papers_dict = {}
+
+    # First add papers from vector store (as fallback)
+    for p in vector_papers:
+        pmid = p.get("pmid", "")
+        if pmid:
+            papers_dict[pmid] = {
+                "id": p.get("id", pmid),
+                "pmid": pmid,
+                "title": p.get("title", "Untitled"),
+                "abstract": p.get("abstract", ""),
+                "journal": p.get("journal", ""),
+                "authors": p.get("authors", []),
+                "keywords": p.get("keywords", []),
+                "indexed_at": p.get("indexed_at", "")
+            }
+
+    # Override with full metadata from metadata store
+    for p in metadata_papers:
+        pmid = p.get("pmid", "")
+        if pmid:
+            papers_dict[pmid] = {
+                "id": pmid,  # Use pmid as id
+                "pmid": pmid,
+                "title": p.get("title", "Untitled"),
+                "abstract": p.get("abstract", ""),  # Full abstract
+                "journal": p.get("journal", ""),
+                "authors": p.get("authors", []),  # All authors
+                "keywords": p.get("keywords", []),
+                "indexed_at": p.get("indexed_at", "")
+            }
+
+    papers = list(papers_dict.values())
 
     return VectorDBPapersResponse(
         papers=[VectorDBPaper(**p) for p in papers],

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Library, Tag, Trash2, ExternalLink, MessageSquare, Loader2, BookOpen, Search, Database, FolderOpen, FileDown, FileX, ChevronRight, ChevronDown } from 'lucide-react'
+import { Library, Tag, Trash2, ExternalLink, MessageSquare, Loader2, BookOpen, Search, Database, FolderOpen, FileDown, FileX, ChevronRight, ChevronDown, Code, FileText } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { libraryApi, vectordbApi, searchApi } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
@@ -342,9 +342,11 @@ interface SavedPaper {
   pmid: string
   title: string
   abstract: string
+  authors?: string[]
   journal?: string
   tags: string[]
   notes?: string
+  saved_at?: string
 }
 
 function SavedPaperItem({
@@ -359,6 +361,20 @@ function SavedPaperItem({
   isDeleting: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showJson, setShowJson] = useState(false)
+
+  // JSON 형식의 메타데이터 생성
+  const jsonMetadata = JSON.stringify({
+    id: paper.id,
+    pmid: paper.pmid,
+    title: paper.title,
+    abstract: paper.abstract,
+    authors: paper.authors || [],
+    journal: paper.journal || "",
+    tags: paper.tags || [],
+    notes: paper.notes || null,
+    saved_at: paper.saved_at || null
+  }, null, 2)
 
   return (
     <div className="transition-all">
@@ -384,37 +400,87 @@ function SavedPaperItem({
       {/* 펼쳐진 상세 정보 */}
       {isExpanded && (
         <div className="px-4 pb-4 pt-1 ml-9 border-l-2 border-cyan-500/30">
-          <div className="flex items-center gap-2 text-sm text-white/60 mb-2">
-            <span>PMID: {paper.pmid}</span>
-            {paper.journal && (
-              <>
-                <span>|</span>
-                <span>{paper.journal}</span>
-              </>
-            )}
+          {/* 보기 모드 토글 */}
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowJson(false)
+              }}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                !showJson
+                  ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/30'
+                  : 'text-white/50 hover:text-white/70'
+              }`}
+            >
+              <FileText size={12} />
+              텍스트
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowJson(true)
+              }}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                showJson
+                  ? 'bg-green-500/30 text-green-200 border border-green-400/30'
+                  : 'text-white/50 hover:text-white/70'
+              }`}
+            >
+              <Code size={12} />
+              JSON
+            </button>
           </div>
 
-          <p className="text-sm text-white/70 mb-3 line-clamp-3">
-            {paper.abstract}
-          </p>
-
-          {paper.tags && paper.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-3">
-              {paper.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="px-2 py-0.5 bg-cyan-500/20 text-cyan-200 rounded text-xs border border-cyan-400/30"
-                >
-                  {tag}
-                </span>
-              ))}
+          {showJson ? (
+            /* JSON 형식 표시 */
+            <div className="mb-3 p-3 bg-black/30 rounded-lg border border-white/10 overflow-x-auto">
+              <pre className="text-xs text-green-300 font-mono whitespace-pre-wrap">
+                {jsonMetadata}
+              </pre>
             </div>
-          )}
+          ) : (
+            /* 텍스트 형식 표시 */
+            <>
+              <div className="flex items-center gap-2 text-sm text-white/60 mb-2">
+                <span>PMID: {paper.pmid}</span>
+                {paper.journal && (
+                  <>
+                    <span>|</span>
+                    <span>{paper.journal}</span>
+                  </>
+                )}
+              </div>
 
-          {paper.notes && (
-            <div className="mb-3 p-2 bg-white/5 rounded border border-white/10">
-              <p className="text-xs text-white/60">{paper.notes}</p>
-            </div>
+              {paper.authors && paper.authors.length > 0 && (
+                <div className="text-sm text-white/50 mb-2">
+                  저자: {paper.authors.slice(0, 3).join(', ')}{paper.authors.length > 3 ? ` 외 ${paper.authors.length - 3}명` : ''}
+                </div>
+              )}
+
+              <p className="text-sm text-white/70 mb-3 line-clamp-3">
+                {paper.abstract}
+              </p>
+
+              {paper.tags && paper.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {paper.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-0.5 bg-cyan-500/20 text-cyan-200 rounded text-xs border border-cyan-400/30"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {paper.notes && (
+                <div className="mb-3 p-2 bg-white/5 rounded border border-white/10">
+                  <p className="text-xs text-white/60">{paper.notes}</p>
+                </div>
+              )}
+            </>
           )}
 
           <div className="flex items-center gap-3">

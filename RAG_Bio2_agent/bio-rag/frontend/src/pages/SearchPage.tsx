@@ -81,8 +81,10 @@ export default function SearchPage() {
       return result.translated
     },
     enabled: !!searchTerm && isKoreanSearch,
-    staleTime: 30 * 60 * 1000, // Cache translation for 30 minutes
-    gcTime: 60 * 60 * 1000, // Keep in cache for 1 hour
+    staleTime: 60 * 60 * 1000, // Cache translation for 1 hour
+    gcTime: 2 * 60 * 60 * 1000, // Keep in cache for 2 hours
+    refetchOnMount: false, // Don't refetch when navigating back
+    refetchOnWindowFocus: false, // Don't refetch on window focus
   })
 
   const translatedQuery = translationData || ''
@@ -126,8 +128,10 @@ export default function SearchPage() {
     queryKey: ['search', isKoreanSearch ? translatedQuery : searchTerm, filters],
     queryFn: () => searchApi.search(isKoreanSearch ? translatedQuery : searchTerm, TOTAL_FETCH_LIMIT, apiFilters),
     enabled: !!(isKoreanSearch ? translatedQuery : searchTerm) && !isTranslating,
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
-    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    staleTime: 30 * 60 * 1000, // Cache for 30 minutes (increased)
+    gcTime: 60 * 60 * 1000, // Keep in cache for 1 hour (increased)
+    refetchOnMount: false, // Don't refetch when navigating back
+    refetchOnWindowFocus: false, // Don't refetch on window focus
   })
 
   // Auto-save search results to VectorDB
