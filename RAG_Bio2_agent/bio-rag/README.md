@@ -63,11 +63,14 @@
 
 | Feature | Description |
 |---------|-------------|
-| **AI 논문 Q&A** | RAG (Retrieval-Augmented Generation) 기반 자연어 질의응답. 관련 논문을 검색하고 GPT-4가 근거 기반 답변 생성 |
-| **의미 기반 검색** | PubMedBERT 임베딩 + Qdrant 벡터 DB를 활용한 시맨틱 검색. 키워드가 아닌 의미로 논문 탐색 |
+| **AI 논문 Q&A** | RAG (Retrieval-Augmented Generation) 기반 자연어 질의응답. VectorDB에서 관련 논문을 검색하고 GPT-4가 근거 기반 답변 생성 |
+| **하이브리드 검색** | OpenAI Embedding (Dense) + SPLADE (Sparse) 하이브리드 검색으로 정확도와 재현율 동시 향상 |
+| **의미 기반 검색** | Qdrant 벡터 DB + 1536차원 OpenAI 임베딩을 활용한 시맨틱 검색. 키워드가 아닌 의미로 논문 탐색 |
+| **한글 검색 지원** | 한글 쿼리 자동 번역 및 PubMed 검색, 결과 한글 요약 기능 |
 | **유사 논문 추천** | 코사인 유사도 기반 관련 논문 자동 추천. 연구 범위를 효율적으로 확장 |
 | **연구 트렌드 분석** | 시계열 키워드 분석, 핫 토픽, 신흥 연구 분야 시각화 대시보드 |
-| **개인 라이브러리** | 관심 논문 저장, 태그 관리, 메모 기능 |
+| **개인 라이브러리** | 관심 논문 저장, 태그 관리, 메모 기능. JSON 파일 기반 영구 저장 |
+| **사용자 인증** | JWT 기반 회원가입/로그인, 영구 사용자 저장 |
 
 ---
 
@@ -124,7 +127,8 @@
 |-------|------------|
 | **Frontend** | React 18 + TypeScript + TailwindCSS + React Query + Zustand + Recharts |
 | **Backend** | Python 3.11 + FastAPI + SQLAlchemy + Pydantic + Celery |
-| **AI/ML** | LangChain + PubMedBERT + OpenAI GPT-4 + Sentence Transformers |
+| **AI/ML** | OpenAI GPT-4 + OpenAI Embeddings (1536d) + SPLADE Sparse Search + LangChain |
+| **Vector Search** | Qdrant (Dense) + SPLADE BM25 (Sparse) Hybrid Search (70:30 가중치) |
 | **Database** | PostgreSQL (metadata) + Qdrant (vectors) + Redis (cache/queue) |
 | **Infrastructure** | Docker Compose + Nginx + AWS (optional) |
 
@@ -145,20 +149,42 @@
 ```bash
 # Clone repository
 git clone https://github.com/david1005910/bio-rag-platform.git
-cd bio-rag-platform/bio-rag
+cd bio-rag-platform
 
 # Configure environment
-cp backend/.env.example backend/.env
-# Edit backend/.env with your API keys
+cp .env.example .env
+# Edit .env with your API keys:
+# - OPENAI_API_KEY (required)
+# - PUBMED_API_KEY (optional)
+# - POSTGRES_PASSWORD
+# - JWT_SECRET_KEY
 
 # Start all services
-docker compose -f infra/docker/docker-compose.yml up -d
+docker compose up -d --build
+
+# Check status
+docker compose ps
+
+# View logs
+docker compose logs -f
 
 # Access the application
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:8000
 # API Docs: http://localhost:8000/docs
+# Qdrant Dashboard: http://localhost:6333/dashboard
 ```
+
+### Docker Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| frontend | 3000 | React + Nginx |
+| backend | 8000 | FastAPI |
+| postgres | 5432 | PostgreSQL 16 |
+| redis | 6379 | Redis 7 |
+| qdrant | 6333/6334 | Vector Database |
+| celery-worker | - | Background Tasks |
 
 ### Option 2: Local Development
 
@@ -206,33 +232,92 @@ REDIS_URL=redis://localhost:6379/0
 
 ```
 bio-rag/
+├── docker-compose.yml       # Docker orchestration
+├── .env.example             # Environment template
 ├── backend/                 # FastAPI Backend
+│   ├── Dockerfile
+│   ├── requirements.txt
 │   ├── src/
 │   │   ├── api/v1/         # REST API endpoints
-│   │   │   ├── auth.py     # Authentication
-│   │   │   ├── search.py   # Paper search
-│   │   │   ├── chat.py     # AI Q&A
-│   │   │   ├── library.py  # User library
-│   │   │   └── trends.py   # Research trends
+│   │   │   ├── auth.py     # JWT Authentication
+│   │   │   ├── search.py   # PubMed search + translation
+│   │   │   ├── chat.py     # RAG-based AI Q&A
+│   │   │   ├── library.py  # User paper library
+│   │   │   ├── trends.py   # Research trends
+│   │   │   └── vectordb.py # Hybrid vector search
 │   │   ├── core/           # Config, DB, Security
+│   │   ├── data/           # Persistent storage
+│   │   │   ├── users.py    # User store (JSON)
+│   │   │   └── library_store.py  # Library store (JSON)
 │   │   ├── models/         # SQLAlchemy models
 │   │   ├── services/       # Business logic
-│   │   │   ├── rag/        # RAG service
+│   │   │   ├── pubmed.py   # PubMed API client
 │   │   │   ├── embedding/  # Vector embeddings
 │   │   │   └── search/     # Semantic search
 │   │   └── tasks/          # Celery async tasks
-│   ├── tests/              # Pytest tests
-│   └── migrations/         # Alembic migrations
+│   ├── data/               # Runtime data (gitignored)
+│   │   ├── users.json      # User data
+│   │   ├── library.json    # Library data
+│   │   └── qdrant/         # Vector database
+│   └── tests/              # Pytest tests
 ├── frontend/               # React Frontend
+│   ├── Dockerfile
+│   ├── nginx.conf          # Production nginx config
 │   └── src/
 │       ├── pages/          # Route pages
 │       ├── components/     # UI components
 │       ├── services/       # API client
 │       └── store/          # Zustand state
-├── infra/                  # Infrastructure
-│   └── docker/             # Docker configs
 └── docs/                   # Documentation
     └── screenshots/        # App screenshots
+```
+
+---
+
+## Architecture
+
+### Hybrid Search System
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      User Query                              │
+│                  "CRISPR gene therapy"                       │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+          ┌──────────┴──────────┐
+          ▼                     ▼
+┌─────────────────┐   ┌─────────────────┐
+│   Dense Search  │   │  Sparse Search  │
+│  (OpenAI 1536d) │   │  (SPLADE BM25)  │
+│                 │   │                 │
+│  Semantic       │   │  Keyword        │
+│  Similarity     │   │  Matching       │
+└────────┬────────┘   └────────┬────────┘
+         │                     │
+         │    70%              │    30%
+         └──────────┬──────────┘
+                    ▼
+         ┌─────────────────┐
+         │  Score Fusion   │
+         │  (Weighted Sum) │
+         └────────┬────────┘
+                  ▼
+         ┌─────────────────┐
+         │  Top-K Results  │
+         └─────────────────┘
+```
+
+### Data Flow
+
+```
+PubMed Search → Auto-save to VectorDB → Hybrid Search → AI Chat (RAG)
+                      │
+                      ▼
+              ┌───────────────┐
+              │    Qdrant     │
+              │  (Local/Docker)│
+              │  1536d vectors │
+              └───────────────┘
 ```
 
 ---
@@ -250,11 +335,31 @@ After starting the backend, access interactive API docs:
 ### Key Endpoints
 
 ```
-POST /api/v1/search          # Semantic paper search
-POST /api/v1/chat/query      # AI Q&A
-GET  /api/v1/papers/{pmid}   # Paper details
-GET  /api/v1/trends/hot      # Hot topics
-GET  /api/v1/trends/keywords # Keyword trends
+# Search
+POST /api/v1/search              # PubMed paper search (한글 지원)
+POST /api/v1/translate           # Korean → English translation
+POST /api/v1/summarize           # Paper summarization
+
+# AI Chat
+POST /api/v1/chat/query          # RAG-based Q&A with VectorDB
+
+# VectorDB
+POST /api/v1/vectordb/papers/save    # Save papers to VectorDB
+POST /api/v1/vectordb/search         # Hybrid search (Dense + Sparse)
+GET  /api/v1/vectordb/stats          # Collection statistics
+
+# Library
+POST /api/v1/library/papers      # Save paper to library
+GET  /api/v1/library/papers      # Get saved papers
+
+# Trends
+GET  /api/v1/trends/hot          # Hot topics
+GET  /api/v1/trends/keywords     # Keyword trends
+POST /api/v1/trends/analyze      # Trend analysis
+
+# Auth
+POST /api/v1/auth/register       # User registration
+POST /api/v1/auth/login          # User login
 ```
 
 ---
@@ -285,16 +390,26 @@ npm run type-check
 
 ## Roadmap
 
+### Completed
 - [x] Core RAG Q&A functionality
 - [x] Semantic paper search
 - [x] Research trends dashboard
 - [x] Similar paper recommendations
-- [ ] Real PubMed API integration
-- [ ] User authentication (JWT)
+- [x] Real PubMed API integration
+- [x] User authentication (JWT)
+- [x] Hybrid search (Dense + Sparse)
+- [x] VectorDB (Qdrant) integration
+- [x] Korean language support (translation & summarization)
+- [x] Persistent user & library storage
+- [x] Docker Compose deployment
+
+### Planned
 - [ ] Paper PDF upload & parsing
-- [ ] Multi-language support
+- [ ] PMC full-text search
 - [ ] Mobile responsive design
-- [ ] Export to citation formats
+- [ ] Export to citation formats (BibTeX, RIS)
+- [ ] Batch paper processing
+- [ ] Custom embedding fine-tuning
 
 ---
 
