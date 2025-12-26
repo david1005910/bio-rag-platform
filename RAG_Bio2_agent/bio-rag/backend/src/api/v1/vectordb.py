@@ -121,11 +121,15 @@ class SPLADESearch:
         """
         Expand query using OpenAI (SPLADE-like expansion).
         Returns list of (term, weight) pairs.
+
+        IMPORTANT: Original query terms get highest weight (2.0) to ensure relevance.
         """
+        # Always include original query terms with highest weight
+        original_tokens = self._tokenize(query)
+        original_terms = [(t, 2.0) for t in original_tokens]  # High weight for original terms
+
         if not settings.OPENAI_API_KEY:
-            # Fallback: just tokenize the query
-            tokens = self._tokenize(query)
-            return [(t, 1.0) for t in tokens]
+            return original_terms
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -134,22 +138,27 @@ class SPLADESearch:
                     "Content-Type": "application/json"
                 }
 
-                prompt = f"""Expand this biomedical search query with related scientific terms.
-Return only the expanded terms as a comma-separated list, ordered by relevance.
-Include synonyms, related concepts, and specific terminology.
+                prompt = f"""Expand this biomedical search query with closely related scientific terms.
+IMPORTANT: Focus on synonyms and directly related terms. Do NOT include unrelated concepts.
 
 Query: "{query}"
 
+Rules:
+1. Include the EXACT original query terms first
+2. Add only synonyms and closely related terms
+3. Do NOT add tangentially related concepts
+4. Maximum 15 terms total
+
 Example:
-Query: "cancer immunotherapy"
-Output: cancer, immunotherapy, tumor, immune, checkpoint, PD-1, PD-L1, CAR-T, oncology, carcinoma, immunoncology
+Query: "CRISPR gene editing"
+Output: CRISPR, gene, editing, Cas9, genome, nuclease, guide RNA, genetic, modification, CRISPR-Cas9, gene therapy
 
 Your output (terms only, comma-separated):"""
 
                 payload = {
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.3,
+                    "temperature": 0.2,
                     "max_tokens": 100
                 }
 
@@ -164,18 +173,29 @@ Your output (terms only, comma-separated):"""
                         # Parse expanded terms with decreasing weights
                         terms = [t.strip().lower() for t in expanded_text.split(",")]
                         weighted_terms = []
+
+                        # Add original terms with highest weight first
+                        seen_terms = set()
+                        for term, weight in original_terms:
+                            if term not in seen_terms:
+                                weighted_terms.append((term, weight))
+                                seen_terms.add(term)
+
+                        # Add expanded terms with decreasing weights
                         for i, term in enumerate(terms):
-                            # Weight decreases for later terms
-                            weight = 1.0 / (1 + 0.1 * i)
-                            weighted_terms.append((term, weight))
-                        return weighted_terms
+                            term = term.strip().lower()
+                            if term and term not in seen_terms:
+                                # Weight decreases for expanded terms (max 1.0)
+                                weight = 1.0 / (1 + 0.15 * i)
+                                weighted_terms.append((term, weight))
+                                seen_terms.add(term)
+
+                        return weighted_terms[:20]  # Limit total terms
                     else:
-                        tokens = self._tokenize(query)
-                        return [(t, 1.0) for t in tokens]
+                        return original_terms
         except Exception as e:
             logger.error(f"Query expansion error: {e}")
-            tokens = self._tokenize(query)
-            return [(t, 1.0) for t in tokens]
+            return original_terms
 
     def fit(self, documents: List[str], doc_ids: List[str]):
         """Build SPLADE-style sparse index"""
@@ -398,6 +418,45 @@ class HybridVectorStore:
         self.splade = SPLADESearch()  # SPLADE for sparse search
         self.qdrant_dense = QdrantDenseSearch()  # Qdrant for dense search
         self._splade_fitted = False
+        # Auto-sync from Qdrant on startup
+        self._sync_from_qdrant()
+
+    def _sync_from_qdrant(self):
+        """Sync documents from Qdrant on startup"""
+        if not self.qdrant_dense.use_qdrant:
+            logger.info("Qdrant not available, skipping sync")
+            return
+
+        try:
+            # Get all points from Qdrant
+            scroll_result = self.qdrant_dense.qdrant_client.scroll(
+                collection_name=self.qdrant_dense.collection_name,
+                limit=10000,  # Adjust based on expected max documents
+                with_payload=True,
+                with_vectors=True
+            )
+
+            points, _ = scroll_result
+            if not points:
+                logger.info("No documents in Qdrant to sync")
+                return
+
+            # Rebuild local documents list
+            self.documents = []
+            for point in points:
+                self.documents.append({
+                    "id": str(point.id),
+                    "text": point.payload.get("text", ""),
+                    "embedding": np.array(point.vector) if point.vector else None,
+                    "metadata": {k: v for k, v in point.payload.items() if k != "text"}
+                })
+
+            # Rebuild SPLADE index
+            self._rebuild_sparse_index()
+            logger.info(f"Synced {len(self.documents)} documents from Qdrant")
+
+        except Exception as e:
+            logger.error(f"Failed to sync from Qdrant: {e}")
 
     def _rebuild_sparse_index(self):
         """Rebuild SPLADE sparse index from current documents"""
@@ -647,79 +706,111 @@ class HybridVectorStore:
         dense_weight: float = 0.7
     ) -> List[dict]:
         """
-        Hybrid search combining Qdrant dense + SPLADE sparse.
+        Hybrid search combining Qdrant dense + SPLADE sparse using Reciprocal Rank Fusion (RRF).
 
-        Score ranges:
-        - Dense score: [0, 1] (cosine similarity)
-        - Sparse score: [0, 30] (scaled BM25/SPLADE)
-        - Hybrid score: [0, 1] (weighted combination)
+        RRF is superior to weighted averaging because:
+        1. It's rank-based, not score-based (avoids scale issues)
+        2. Documents appearing in both lists get significant boost
+        3. High-ranked documents in either list are preserved
 
-        Uses weighted score combination after normalization.
-        Returns results with both dense_score and sparse_score for analysis.
+        Score formula: RRF_score = sum(1 / (k + rank_i)) for each ranking
+        Where k=60 is a constant that controls ranking smoothness.
+
+        Final score is scaled to [0, 1] range for consistency.
         """
         if not self.documents:
             return []
 
+        # RRF constant (standard value from literature)
+        k = 60
+
+        # Get dense results with ranks
+        dense_results = await self.search_dense(query, top_k=len(self.documents))
+        dense_ranks = {r["id"]: rank + 1 for rank, r in enumerate(dense_results)}
+        dense_scores_map = {r["id"]: r["dense_score"] for r in dense_results}
+
+        # Get sparse results with ranks
+        sparse_results = await self.search_sparse(query, top_k=len(self.documents))
+        sparse_ranks = {r["id"]: rank + 1 for rank, r in enumerate(sparse_results)}
+        sparse_scores_map = {r["id"]: r["sparse_score"] for r in sparse_results}
+        matched_terms_map = {r["id"]: r.get("matched_terms", []) for r in sparse_results}
+
+        # Calculate RRF scores for all documents
+        all_doc_ids = set(dense_ranks.keys()) | set(sparse_ranks.keys())
+        rrf_results = []
+
+        # Track max RRF score for normalization
+        max_rrf = 0.0
         sparse_weight = 1.0 - dense_weight
 
-        # Get Qdrant dense results (already normalized to 0-1)
-        dense_results = await self.search_dense(query, top_k=len(self.documents))
-
-        # Get SPLADE sparse results (already normalized to 0-30)
-        sparse_results = await self.search_sparse(query, top_k=len(self.documents))
-
-        # Create score maps and collect matched terms
-        # dense_score is in [0, 1], sparse_score is in [0, 30]
-        dense_scores = {r["id"]: r["dense_score"] for r in dense_results}
-        sparse_scores = {r["id"]: r["sparse_score"] for r in sparse_results}
-        matched_terms_map = {r["id"]: r.get("matched_terms", []) for r in sparse_results}
-        search_engine_map = {r["id"]: r.get("search_engine", "unknown") for r in dense_results}
-
-        # For hybrid score calculation, normalize sparse scores from [0, 30] to [0, 1]
-        sparse_scores_for_hybrid = {}
-        if sparse_scores:
-            max_sparse = 30.0  # Max possible sparse score
-            for doc_id, score in sparse_scores.items():
-                sparse_scores_for_hybrid[doc_id] = min(score / max_sparse, 1.0)
-
-        # Combine scores for all documents
-        all_doc_ids = set(dense_scores.keys()) | set(sparse_scores.keys())
-        combined_results = []
-
         for doc_id in all_doc_ids:
+            # Get document
             doc = next((d for d in self.documents if d["id"] == doc_id), None)
             if doc is None:
-                # Try to find in dense results metadata
                 dense_r = next((r for r in dense_results if r["id"] == doc_id), None)
                 if dense_r:
                     doc = {"id": doc_id, "text": dense_r["text"], "metadata": dense_r["metadata"]}
                 else:
                     continue
 
-            # Get scores (dense is 0-1, sparse is 0-30)
-            d_score = dense_scores.get(doc_id, 0.0)  # Already in [0, 1]
-            s_score = sparse_scores.get(doc_id, 0.0)  # In [0, 30]
-            s_score_normalized = sparse_scores_for_hybrid.get(doc_id, 0.0)  # Normalized to [0, 1]
+            # Calculate RRF score with weights
+            dense_rank = dense_ranks.get(doc_id)
+            sparse_rank = sparse_ranks.get(doc_id)
 
-            # Weighted combination for hybrid score [0, 1]
-            hybrid_score = (d_score * dense_weight) + (s_score_normalized * sparse_weight)
+            rrf_score = 0.0
 
-            combined_results.append({
+            # Dense contribution (weighted)
+            if dense_rank is not None:
+                rrf_score += dense_weight * (1.0 / (k + dense_rank))
+
+            # Sparse contribution (weighted)
+            if sparse_rank is not None:
+                rrf_score += sparse_weight * (1.0 / (k + sparse_rank))
+
+            # Bonus for appearing in both results (synergy boost)
+            if dense_rank is not None and sparse_rank is not None:
+                # Significant boost when document matches both semantic and keyword search
+                synergy_boost = 0.2 * (1.0 / (k + min(dense_rank, sparse_rank)))
+                rrf_score += synergy_boost
+
+            max_rrf = max(max_rrf, rrf_score)
+
+            rrf_results.append({
                 "id": doc_id,
                 "text": doc["text"],
-                "dense_score": d_score,  # [0, 1] range
-                "sparse_score": s_score,  # [0, 30] range
-                "score": round(hybrid_score, 4),  # [0, 1] range - hybrid score
+                "dense_score": dense_scores_map.get(doc_id, 0.0),
+                "sparse_score": sparse_scores_map.get(doc_id, 0.0),
+                "rrf_score": rrf_score,
+                "dense_rank": dense_rank,
+                "sparse_rank": sparse_rank,
                 "metadata": doc["metadata"],
                 "matched_terms": matched_terms_map.get(doc_id, []),
-                "search_engine": "hybrid"
+                "search_engine": "hybrid_rrf"
             })
 
-        combined_results.sort(key=lambda x: x["score"], reverse=True)
+        # Normalize RRF scores to [0, 1] and add original score scaling
+        for result in rrf_results:
+            # Base normalized RRF score
+            normalized_rrf = result["rrf_score"] / max_rrf if max_rrf > 0 else 0.0
 
-        logger.info(f"Hybrid search: {len(dense_results)} dense + {len(sparse_results)} sparse -> {len(combined_results)} combined")
+            # Boost based on actual dense score (high semantic similarity matters)
+            dense_boost = result["dense_score"] * 0.2 if result["dense_score"] else 0
 
-        return combined_results[:top_k]
+            # Final score: normalized RRF + dense quality boost, capped at 1.0
+            final_score = min(normalized_rrf + dense_boost, 1.0)
+
+            # Scale to more intuitive range (0.5-1.0 for relevant results)
+            result["score"] = round(0.5 + (final_score * 0.5), 4)
+
+        # Sort by final score
+        rrf_results.sort(key=lambda x: x["score"], reverse=True)
+
+        logger.info(
+            f"Hybrid RRF search: {len(dense_results)} dense + {len(sparse_results)} sparse "
+            f"-> top score: {rrf_results[0]['score'] if rrf_results else 0}"
+        )
+
+        return rrf_results[:top_k]
 
     async def search(
         self,
