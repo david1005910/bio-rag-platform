@@ -706,42 +706,44 @@ class HybridVectorStore:
         dense_weight: float = 0.7
     ) -> List[dict]:
         """
-        Hybrid search combining Qdrant dense + SPLADE sparse using Reciprocal Rank Fusion (RRF).
+        Hybrid search combining Qdrant dense + SPLADE sparse using weighted average.
 
-        RRF is superior to weighted averaging because:
-        1. It's rank-based, not score-based (avoids scale issues)
-        2. Documents appearing in both lists get significant boost
-        3. High-ranked documents in either list are preserved
+        Score formula: hybrid_score = (dense_score * 0.7) + (sparse_score_normalized * 0.3)
 
-        Score formula: RRF_score = sum(1 / (k + rank_i)) for each ranking
-        Where k=60 is a constant that controls ranking smoothness.
+        Features:
+        - Dense weight: 0.7 (semantic similarity)
+        - Sparse weight: 0.3 (keyword matching)
+        - Synergy boost: +0.1 when document appears in both search results
+        - Query expansion: Original words weight 2.0, expanded words <= 1.0
 
-        Final score is scaled to [0, 1] range for consistency.
+        Score ranges:
+        - Dense score: [0, 1] (cosine similarity)
+        - Sparse score: [0, 1] (normalized from BM25)
+        - Hybrid score: [0, 1] (weighted combination with synergy boost)
         """
         if not self.documents:
             return []
 
-        # RRF constant (standard value from literature)
-        k = 60
+        sparse_weight = 1.0 - dense_weight  # 0.3
 
-        # Get dense results with ranks
+        # Get dense results
         dense_results = await self.search_dense(query, top_k=len(self.documents))
-        dense_ranks = {r["id"]: rank + 1 for rank, r in enumerate(dense_results)}
         dense_scores_map = {r["id"]: r["dense_score"] for r in dense_results}
 
-        # Get sparse results with ranks
+        # Get sparse results
         sparse_results = await self.search_sparse(query, top_k=len(self.documents))
-        sparse_ranks = {r["id"]: rank + 1 for rank, r in enumerate(sparse_results)}
         sparse_scores_map = {r["id"]: r["sparse_score"] for r in sparse_results}
         matched_terms_map = {r["id"]: r.get("matched_terms", []) for r in sparse_results}
 
-        # Calculate RRF scores for all documents
-        all_doc_ids = set(dense_ranks.keys()) | set(sparse_ranks.keys())
-        rrf_results = []
+        # Normalize sparse scores to [0, 1] for weighted combination
+        max_sparse = max(sparse_scores_map.values()) if sparse_scores_map else 1.0
+        sparse_scores_normalized = {}
+        for doc_id, score in sparse_scores_map.items():
+            sparse_scores_normalized[doc_id] = score / max_sparse if max_sparse > 0 else 0.0
 
-        # Track max RRF score for normalization
-        max_rrf = 0.0
-        sparse_weight = 1.0 - dense_weight
+        # Combine scores for all documents
+        all_doc_ids = set(dense_scores_map.keys()) | set(sparse_scores_map.keys())
+        combined_results = []
 
         for doc_id in all_doc_ids:
             # Get document
@@ -753,64 +755,42 @@ class HybridVectorStore:
                 else:
                     continue
 
-            # Calculate RRF score with weights
-            dense_rank = dense_ranks.get(doc_id)
-            sparse_rank = sparse_ranks.get(doc_id)
+            # Get scores
+            d_score = dense_scores_map.get(doc_id, 0.0)  # [0, 1]
+            s_score_raw = sparse_scores_map.get(doc_id, 0.0)  # Original sparse score
+            s_score_norm = sparse_scores_normalized.get(doc_id, 0.0)  # [0, 1]
 
-            rrf_score = 0.0
+            # Weighted combination: dense * 0.7 + sparse * 0.3
+            hybrid_score = (d_score * dense_weight) + (s_score_norm * sparse_weight)
 
-            # Dense contribution (weighted)
-            if dense_rank is not None:
-                rrf_score += dense_weight * (1.0 / (k + dense_rank))
+            # Synergy boost: +0.1 when document appears in BOTH search results
+            has_dense = doc_id in dense_scores_map and d_score > 0
+            has_sparse = doc_id in sparse_scores_map and s_score_raw > 0
+            if has_dense and has_sparse:
+                # Boost proportional to the quality of both scores
+                synergy_boost = 0.1 * min(d_score, s_score_norm)
+                hybrid_score = min(hybrid_score + synergy_boost, 1.0)
 
-            # Sparse contribution (weighted)
-            if sparse_rank is not None:
-                rrf_score += sparse_weight * (1.0 / (k + sparse_rank))
-
-            # Bonus for appearing in both results (synergy boost)
-            if dense_rank is not None and sparse_rank is not None:
-                # Significant boost when document matches both semantic and keyword search
-                synergy_boost = 0.2 * (1.0 / (k + min(dense_rank, sparse_rank)))
-                rrf_score += synergy_boost
-
-            max_rrf = max(max_rrf, rrf_score)
-
-            rrf_results.append({
+            combined_results.append({
                 "id": doc_id,
                 "text": doc["text"],
-                "dense_score": dense_scores_map.get(doc_id, 0.0),
-                "sparse_score": sparse_scores_map.get(doc_id, 0.0),
-                "rrf_score": rrf_score,
-                "dense_rank": dense_rank,
-                "sparse_rank": sparse_rank,
+                "dense_score": round(d_score, 4),  # [0, 1]
+                "sparse_score": round(s_score_raw, 2),  # Original scale for display
+                "score": round(hybrid_score, 4),  # [0, 1] hybrid score
                 "metadata": doc["metadata"],
                 "matched_terms": matched_terms_map.get(doc_id, []),
-                "search_engine": "hybrid_rrf"
+                "search_engine": "hybrid"
             })
 
-        # Normalize RRF scores to [0, 1] and add original score scaling
-        for result in rrf_results:
-            # Base normalized RRF score
-            normalized_rrf = result["rrf_score"] / max_rrf if max_rrf > 0 else 0.0
-
-            # Boost based on actual dense score (high semantic similarity matters)
-            dense_boost = result["dense_score"] * 0.2 if result["dense_score"] else 0
-
-            # Final score: normalized RRF + dense quality boost, capped at 1.0
-            final_score = min(normalized_rrf + dense_boost, 1.0)
-
-            # Scale to more intuitive range (0.5-1.0 for relevant results)
-            result["score"] = round(0.5 + (final_score * 0.5), 4)
-
-        # Sort by final score
-        rrf_results.sort(key=lambda x: x["score"], reverse=True)
+        # Sort by hybrid score
+        combined_results.sort(key=lambda x: x["score"], reverse=True)
 
         logger.info(
-            f"Hybrid RRF search: {len(dense_results)} dense + {len(sparse_results)} sparse "
-            f"-> top score: {rrf_results[0]['score'] if rrf_results else 0}"
+            f"Hybrid search: {len(dense_results)} dense + {len(sparse_results)} sparse "
+            f"-> top score: {combined_results[0]['score'] if combined_results else 0}"
         )
 
-        return rrf_results[:top_k]
+        return combined_results[:top_k]
 
     async def search(
         self,
