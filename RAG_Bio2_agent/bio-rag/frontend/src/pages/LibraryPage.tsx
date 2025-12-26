@@ -41,7 +41,7 @@ export default function LibraryPage() {
   })
 
   const handleDelete = (paperId: string, title: string) => {
-    if (confirm(`"${title.substring(0, 50)}..." 논문을 삭제하시겠습니까?`)) {
+    if (confirm(`"${title.substring(0, 50)}..." Meta 데이터를 삭제하시겠습니까?`)) {
       deleteMutation.mutate(paperId)
     }
   }
@@ -55,7 +55,7 @@ export default function LibraryPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold liquid-text">내 라이브러리</h1>
-          <p className="liquid-text-muted mt-1">인덱싱된 논문 및 저장한 논문을 관리하세요</p>
+          <p className="liquid-text-muted mt-1">인덱싱된 논문 및 저장된 Meta 데이터를 관리하세요</p>
         </div>
         <div className="flex items-center gap-2">
           {activeTab === 'vectordb' ? (
@@ -69,7 +69,7 @@ export default function LibraryPage() {
             <>
               <BookOpen className="text-cyan-300" size={24} />
               <span className="text-white font-medium">
-                {papersData?.length || 0}개의 저장 논문
+                {papersData?.length || 0}개의 Meta 데이터
               </span>
             </>
           )}
@@ -103,7 +103,7 @@ export default function LibraryPage() {
           }`}
         >
           <FolderOpen size={18} />
-          저장된 논문
+          저장된 Meta 데이터
           {papersData?.length ? (
             <span className="ml-1 px-2 py-0.5 bg-cyan-500/30 rounded-full text-xs">
               {papersData.length}
@@ -232,7 +232,7 @@ export default function LibraryPage() {
               <div className="glossy-panel p-12 text-center">
                 <Library className="mx-auto text-white/30 mb-4" size={48} />
                 <h3 className="text-lg font-medium text-white mb-2">
-                  {selectedTag ? `"${selectedTag}" 태그의 논문이 없습니다` : '저장된 논문이 없습니다'}
+                  {selectedTag ? `"${selectedTag}" 태그의 Meta 데이터가 없습니다` : '저장된 Meta 데이터가 없습니다'}
                 </h3>
                 <p className="liquid-text-muted mb-6">
                   검색에서 논문을 찾아 저장해보세요
