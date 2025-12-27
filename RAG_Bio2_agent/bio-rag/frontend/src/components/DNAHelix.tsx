@@ -64,6 +64,7 @@ const atomLabels = {
   O: 'O',
   H: 'H',
   R: 'R',
+  S: 'S',
 }
 
 interface AtomProps {
@@ -78,7 +79,10 @@ interface AtomProps {
   showLabel?: boolean
 }
 
-function Atom({ x, y, z, type, size, helixRadius, delay, index, showLabel = true }: AtomProps) {
+function Atom({ x, y, z, type, size, helixRadius, delay: _delay, index: _index, showLabel = true }: AtomProps) {
+  // _delay and _index are passed for future animation support
+  void _delay
+  void _index
   const depthFactor = (z + helixRadius) / (helixRadius * 2)
   const opacity = 0.6 + depthFactor * 0.4
   const scale = 0.75 + depthFactor * 0.45

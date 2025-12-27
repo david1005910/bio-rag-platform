@@ -9,7 +9,8 @@ import type { PDFInfo } from '@/types'
 type TabType = 'saved' | 'vectordb'
 
 export default function LibraryPage() {
-  const { isAuthenticated } = useAuthStore()
+  // Note: isAuthenticated can be used for future login check
+  useAuthStore()  // Keep store subscription for future use
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>('vectordb')
   const queryClient = useQueryClient()
