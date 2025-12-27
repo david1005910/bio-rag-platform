@@ -124,7 +124,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Backend Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./RAG_Bio2_agent/bio-rag/backend
           push: false
@@ -133,7 +133,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Frontend Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./RAG_Bio2_agent/bio-rag/frontend
           push: false
