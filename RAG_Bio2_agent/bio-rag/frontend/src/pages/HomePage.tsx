@@ -32,7 +32,7 @@ export default function HomePage() {
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold liquid-text tracking-tight">
               AI로 더 빠르게,
               <br />
-              <span className="bg-gradient-to-r from-yellow-200 via-pink-200 to-cyan-200 bg-clip-text text-transparent">바이오 연구</span>를 혁신하세요
+              <span className="bg-gradient-to-r from-amber-300 via-rose-300 to-sky-300 bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(255,182,193,0.8)]">바이오 연구</span>를 혁신하세요
             </h1>
             <p className="mt-6 text-lg sm:text-xl liquid-text-muted max-w-3xl mx-auto">
               Bio-RAG는 PubMed 논문을 AI로 분석하여 연구자들이 더 빠르게
