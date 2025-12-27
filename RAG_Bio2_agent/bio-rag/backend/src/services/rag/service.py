@@ -3,11 +3,17 @@
 import logging
 import re
 import time
-from typing import List, Optional
+from typing import List, Optional, Literal
 from dataclasses import dataclass
 
 import openai
 from sentence_transformers import CrossEncoder
+
+try:
+    import cohere
+    COHERE_AVAILABLE = True
+except ImportError:
+    COHERE_AVAILABLE = False
 
 from src.core.config import settings
 from src.services.embedding.generator import EmbeddingGenerator, get_embedding_generator
@@ -68,7 +74,8 @@ FORMAT:
         embedding_generator: Optional[EmbeddingGenerator] = None,
         openai_api_key: Optional[str] = None,
         model: Optional[str] = None,
-        use_reranking: bool = True
+        use_reranking: bool = True,
+        reranker_type: Literal["cohere", "crossencoder"] = "cohere"
     ):
         """
         Initialize RAG service.
@@ -78,7 +85,8 @@ FORMAT:
             embedding_generator: Embedding generator instance
             openai_api_key: OpenAI API key
             model: OpenAI model to use
-            use_reranking: Whether to use cross-encoder reranking
+            use_reranking: Whether to use reranking
+            reranker_type: Type of reranker ("cohere" or "crossencoder")
         """
         self.vector_store = vector_store or get_vector_store()
         self.embedding_generator = embedding_generator or get_embedding_generator()
@@ -90,15 +98,28 @@ FORMAT:
 
         # Initialize reranker
         self.use_reranking = use_reranking
+        self.reranker_type = reranker_type
+        self.reranker = None
+        self.cohere_client = None
+
         if use_reranking:
-            try:
-                self.reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-12-v2')
-                logger.info("Reranker initialized")
-            except Exception as e:
-                logger.warning(f"Failed to load reranker: {e}")
-                self.reranker = None
-        else:
-            self.reranker = None
+            # Try Cohere first if specified
+            if reranker_type == "cohere" and COHERE_AVAILABLE and settings.COHERE_API_KEY:
+                try:
+                    self.cohere_client = cohere.Client(settings.COHERE_API_KEY)
+                    logger.info("Cohere reranker initialized")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize Cohere: {e}")
+                    self.cohere_client = None
+
+            # Fallback to CrossEncoder
+            if self.cohere_client is None:
+                try:
+                    self.reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-12-v2')
+                    logger.info("CrossEncoder reranker initialized (fallback)")
+                except Exception as e:
+                    logger.warning(f"Failed to load CrossEncoder reranker: {e}")
+                    self.reranker = None
 
     async def query(
         self,
@@ -130,7 +151,8 @@ FORMAT:
             filter_dict = {"pmid": context_pmids}
 
         # Retrieve more documents if reranking
-        search_k = top_k * 2 if rerank and self.reranker else top_k
+        has_reranker = self.cohere_client or self.reranker
+        search_k = top_k * 2 if rerank and has_reranker else top_k
         search_results = self.vector_store.search(
             query_embedding=query_embedding,
             top_k=search_k,
@@ -146,7 +168,7 @@ FORMAT:
             )
 
         # 3. Rerank if enabled
-        if rerank and self.reranker:
+        if rerank and (self.cohere_client or self.reranker):
             search_results = self._rerank(question, search_results)[:top_k]
 
         # 4. Build context
@@ -175,10 +197,55 @@ FORMAT:
         question: str,
         results: List[dict]
     ) -> List[dict]:
-        """Rerank search results using cross-encoder."""
-        if not self.reranker or not results:
+        """Rerank search results using Cohere or CrossEncoder."""
+        if not results:
             return results
 
+        # Try Cohere reranking first
+        if self.cohere_client:
+            try:
+                return self._rerank_cohere(question, results)
+            except Exception as e:
+                logger.warning(f"Cohere reranking failed: {e}, falling back to CrossEncoder")
+
+        # Fallback to CrossEncoder
+        if self.reranker:
+            return self._rerank_crossencoder(question, results)
+
+        return results
+
+    def _rerank_cohere(
+        self,
+        question: str,
+        results: List[dict]
+    ) -> List[dict]:
+        """Rerank using Cohere Rerank API."""
+        documents = [r['text'] for r in results]
+
+        response = self.cohere_client.rerank(
+            model="rerank-multilingual-v3.0",  # Supports multiple languages including Korean
+            query=question,
+            documents=documents,
+            top_n=len(documents),
+            return_documents=False
+        )
+
+        # Sort results by Cohere relevance score
+        reranked = []
+        for item in response.results:
+            result = results[item.index].copy()
+            result['rerank_score'] = item.relevance_score
+            reranked.append(result)
+
+        logger.info(f"Cohere reranked {len(reranked)} results")
+        return reranked
+
+    def _rerank_crossencoder(
+        self,
+        question: str,
+        results: List[dict]
+    ) -> List[dict]:
+        """Rerank using CrossEncoder."""
         # Create query-document pairs
         pairs = [(question, r['text']) for r in results]
 

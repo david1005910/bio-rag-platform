@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     PUBMED_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4"
+    COHERE_API_KEY: str = ""  # For reranking
 
     # Embedding Model
     EMBEDDING_MODEL: str = "text-embedding-3-small"

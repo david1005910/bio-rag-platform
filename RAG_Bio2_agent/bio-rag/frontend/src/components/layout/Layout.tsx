@@ -2,7 +2,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { Search, MessageSquare, Library, TrendingUp, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
-import DNAHelix from '@/components/DNAHelix'
+// DNAHelix removed for cleaner UI
 
 const navItems = [
   { path: '/search', label: '논문 검색', icon: Search },
@@ -34,8 +34,6 @@ export default function Layout() {
         <div className="blob blob-orange w-64 h-64 bottom-40 right-1/3 animate-blob opacity-40" />
         <div className="blob blob-cyan w-56 h-56 top-1/2 left-1/2 animate-blob-delay-2 opacity-50" />
 
-        {/* DNA Helix Animation */}
-        <DNAHelix count={4} />
       </div>
 
       {/* Header */}
