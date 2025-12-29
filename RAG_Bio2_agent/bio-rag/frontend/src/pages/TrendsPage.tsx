@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
-import { TrendingUp, BarChart3, Flame, Loader2, Sparkles, Search, ArrowRight, Lightbulb, Target, Compass } from 'lucide-react'
+import { TrendingUp, BarChart3, Flame, Loader2, Sparkles, Search, ArrowRight, Lightbulb, Target, Compass, Workflow } from 'lucide-react'
 import { trendsApi } from '@/services/api'
+import PipelineAnimation from '@/components/PipelineAnimation'
 import {
   BarChart,
   Bar,
@@ -21,10 +22,13 @@ import {
 
 const COLORS = ['#06b6d4', '#8b5cf6', '#f472b6', '#fb923c', '#22c55e', '#eab308', '#f43f5e', '#6366f1', '#14b8a6', '#a855f7']
 
+type ViewMode = 'trends' | 'pipeline'
+
 export default function TrendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryFromUrl = searchParams.get('q') || ''
   const [searchInput, setSearchInput] = useState(queryFromUrl)
+  const [viewMode, setViewMode] = useState<ViewMode>('trends')
 
   // AI Trend Analysis
   const { data: trendAnalysis, isLoading: analysisLoading, error: analysisError } = useQuery({
@@ -97,49 +101,89 @@ export default function TrendsPage() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold liquid-text">연구 트렌드</h1>
-        <p className="liquid-text-muted mt-1">
-          {queryFromUrl
-            ? `"${queryFromUrl}" 관련 연구 트렌드 분석`
-            : '바이오메디컬 연구의 최신 트렌드를 확인하세요'
-          }
-        </p>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold liquid-text">연구 트렌드</h1>
+            <p className="liquid-text-muted mt-1">
+              {viewMode === 'pipeline'
+                ? 'RAG 파이프라인의 작동 과정을 단계별로 확인하세요'
+                : queryFromUrl
+                  ? `"${queryFromUrl}" 관련 연구 트렌드 분석`
+                  : '바이오메디컬 연구의 최신 트렌드를 확인하세요'
+              }
+            </p>
+          </div>
+
+          {/* View Mode Tabs */}
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
+            <button
+              onClick={() => setViewMode('trends')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === 'trends'
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-400/30'
+                  : 'text-white/60 hover:text-white/80'
+              }`}
+            >
+              <TrendingUp size={18} />
+              트렌드 분석
+            </button>
+            <button
+              onClick={() => setViewMode('pipeline')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === 'pipeline'
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-400/30'
+                  : 'text-white/60 hover:text-white/80'
+              }`}
+            >
+              <Workflow size={18} />
+              RAG 파이프라인
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Search Bar */}
-      <form onSubmit={handleSearch} className="mb-8">
-        <div className="flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50" size={20} />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="연구 트렌드를 분석할 키워드를 입력하세요 (예: cancer immunotherapy)"
-              className="glossy-input w-full pl-12 pr-4 py-4"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={!searchInput.trim() || analysisLoading}
-            className="glossy-btn-primary px-8 py-4 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {analysisLoading ? <Loader2 className="animate-spin" size={20} /> : <TrendingUp size={20} />}
-            트렌드 분석
-          </button>
-          {queryFromUrl && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="glossy-btn px-4 py-4"
-            >
-              초기화
-            </button>
-          )}
-        </div>
-      </form>
+      {/* Pipeline Animation View */}
+      {viewMode === 'pipeline' && (
+        <PipelineAnimation />
+      )}
 
-      {/* AI Analysis Section - Only shown when there's a search query */}
+      {/* Trends View */}
+      {viewMode === 'trends' && (
+        <>
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="mb-8">
+            <div className="flex gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50" size={20} />
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="연구 트렌드를 분석할 키워드를 입력하세요 (예: cancer immunotherapy)"
+                  className="glossy-input w-full pl-12 pr-4 py-4"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!searchInput.trim() || analysisLoading}
+                className="glossy-btn-primary px-8 py-4 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {analysisLoading ? <Loader2 className="animate-spin" size={20} /> : <TrendingUp size={20} />}
+                트렌드 분석
+              </button>
+              {queryFromUrl && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="glossy-btn px-4 py-4"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* AI Analysis Section - Only shown when there's a search query */}
       {queryFromUrl && (
         <div className="mb-8">
           {analysisLoading ? (
@@ -481,6 +525,8 @@ export default function TrendsPage() {
               </div>
             </div>
           </div>
+        </>
+      )}
         </>
       )}
     </div>
