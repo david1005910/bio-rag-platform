@@ -34,6 +34,16 @@ export interface ChatSource {
   title: string
   relevance: number
   excerpt: string
+  sourceType?: string
+  denseScore?: number
+  sparseScore?: number
+}
+
+export interface SimilarPaper {
+  pmid: string
+  title: string
+  similarity_score?: number
+  common_keywords?: string[]
 }
 
 export interface ChatMessage {

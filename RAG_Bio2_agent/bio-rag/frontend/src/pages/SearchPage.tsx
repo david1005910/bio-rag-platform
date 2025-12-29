@@ -100,6 +100,7 @@ export default function SearchPage() {
       }
       setSearchParams(newParams, { replace: true })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Run only on mount
 
   // Get search term - use URL first, then stored
@@ -128,6 +129,7 @@ export default function SearchPage() {
     if (urlQuery && urlQuery !== query) {
       setQuery(urlQuery)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   // Sync filters and page from URL when navigating back
@@ -147,6 +149,7 @@ export default function SearchPage() {
         setCurrentPage(page)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   // Convert filters for API
@@ -269,6 +272,7 @@ export default function SearchPage() {
       prevSearchTermRef.current = searchTerm
       prevFiltersRef.current = filters
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, filters])
 
   // Check if any filters are active

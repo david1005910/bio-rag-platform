@@ -5,12 +5,14 @@ import type {
   ChatQueryResponse,
   ChatSession,
   ChatMessage,
+  ChatSource,
   AuthTokens,
   User,
   SavedPaper,
   HotTopic,
   KeywordTrend,
   PDFInfo,
+  SimilarPaper,
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
@@ -133,7 +135,7 @@ export const searchApi = {
     }
   },
 
-  getSimilarPapers: async (pmid: string, limit: number = 5): Promise<Paper[]> => {
+  getSimilarPapers: async (pmid: string, limit: number = 5): Promise<SimilarPaper[]> => {
     const response = await api.get(`/papers/${pmid}/similar`, { params: { limit } })
     // API returns array directly
     return response.data || []
@@ -204,6 +206,17 @@ export interface ChatQueryResponseExtended extends ChatQueryResponse {
   searchMode?: string
 }
 
+// API response source (snake_case from backend)
+interface ApiChatSource {
+  pmid: string
+  title: string
+  relevance: number
+  excerpt: string
+  source_type?: string
+  dense_score?: number
+  sparse_score?: number
+}
+
 export const chatApi = {
   query: async (
     question: string,
@@ -225,7 +238,7 @@ export const chatApi = {
     })
     return {
       answer: response.data.answer,
-      sources: response.data.sources.map((s: any) => ({
+      sources: response.data.sources.map((s: ApiChatSource): ChatSource => ({
         ...s,
         sourceType: s.source_type,
         denseScore: s.dense_score,

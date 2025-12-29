@@ -284,7 +284,7 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
               {message.vectordbUsed && <span className="ml-2 text-xs text-cyan-400/70">[VectorDB]</span>}
             </summary>
             <div className="space-y-2 mt-3">
-              {message.sources.map((source: any, index: number) => (
+              {message.sources.map((source, index: number) => (
                 <div
                   key={source.pmid}
                   className="text-sm bg-white/10 p-3 rounded-xl border border-white/10"

@@ -223,7 +223,7 @@ export default function PaperDetailPage() {
         <div className="glossy-panel p-8">
           <h2 className="text-lg font-semibold text-white mb-4">유사 논문</h2>
           <div className="space-y-4">
-            {similarPapers.map((similar: any) => (
+            {similarPapers.map((similar) => (
               <Link
                 key={similar.pmid}
                 to={`/paper/${similar.pmid}`}
