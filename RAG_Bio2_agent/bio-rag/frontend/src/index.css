@@ -5,8 +5,8 @@
 /* Custom base styles - Dark Mode Terminal Style */
 body {
   @apply text-white antialiased;
-  /* Dark gradient background - terminal style */
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 25%, #16213e 50%, #1a1a2e 75%, #0f0f1a 100%);
+  /* Dark gradient background - softer blue */
+  background: linear-gradient(135deg, #1a1a2e 0%, #2d2d4a 25%, #3a4a6b 50%, #2d2d4a 75%, #1a1a2e 100%);
   background-attachment: fixed;
   min-height: 100vh;
 }
