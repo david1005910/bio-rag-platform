@@ -5,6 +5,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { searchApi, libraryApi, vectordbApi } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { useSearchStore } from '@/store/searchStore'
+import { validateSearchQuery, validateYearParam, validateStringArrayParam } from '@/utils/validation'
+import { logError, getErrorMessage } from '@/utils/errorHandler'
 import type { PaperSearchResult, PDFInfo } from '@/types'
 
 // Simple Korean detection
@@ -20,18 +22,23 @@ interface SearchFilters {
   authors?: string[]
 }
 
-// Parse filters from URL params
+// Parse filters from URL params with validation
 function parseFiltersFromUrl(searchParams: URLSearchParams): SearchFilters {
   const filters: SearchFilters = {}
-  const yearFrom = searchParams.get('yearFrom')
-  const yearTo = searchParams.get('yearTo')
-  const journals = searchParams.get('journals')
-  const authors = searchParams.get('authors')
 
-  if (yearFrom) filters.yearFrom = parseInt(yearFrom)
-  if (yearTo) filters.yearTo = parseInt(yearTo)
-  if (journals) filters.journals = journals.split(',').filter(Boolean)
-  if (authors) filters.authors = authors.split(',').filter(Boolean)
+  // Validate year parameters
+  filters.yearFrom = validateYearParam(searchParams.get('yearFrom'))
+  filters.yearTo = validateYearParam(searchParams.get('yearTo'))
+
+  // Validate and sanitize string arrays
+  filters.journals = validateStringArrayParam(searchParams.get('journals'), 10, 100)
+  filters.authors = validateStringArrayParam(searchParams.get('authors'), 20, 100)
+
+  // Validate year range
+  if (filters.yearFrom && filters.yearTo && filters.yearFrom > filters.yearTo) {
+    filters.yearFrom = undefined
+    filters.yearTo = undefined
+  }
 
   return filters
 }
@@ -200,7 +207,7 @@ export default function SearchPage() {
         setAutoSavedQuery(currentQuery) // Mark this query as saved
         console.log(`Auto-saved ${result.saved_count} papers to VectorDB`)
       } catch (error) {
-        console.error('Auto-save to VectorDB failed:', error)
+        logError('Auto-save to VectorDB', error)
       } finally {
         setIsSavingToVectorDB(false)
       }
@@ -343,16 +350,19 @@ export default function SearchPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (query.trim()) {
-      const trimmedQuery = query.trim()
 
-      // Reset VectorDB save result for new search
-      setVectorDBSaveResult(null)
-
-      // Update URL params with query and current filters (preserves state on back navigation)
-      const filterParams = filtersToUrlParams(filters)
-      setSearchParams({ q: trimmedQuery, ...filterParams })
+    // Validate and sanitize search query
+    const validation = validateSearchQuery(query)
+    if (!validation.valid || !validation.sanitized) {
+      return
     }
+
+    // Reset VectorDB save result for new search
+    setVectorDBSaveResult(null)
+
+    // Update URL params with validated query and current filters
+    const filterParams = filtersToUrlParams(filters)
+    setSearchParams({ q: validation.sanitized, ...filterParams })
   }
 
   // Save all search results to VectorDB
@@ -379,8 +389,8 @@ export default function SearchPage() {
         chunks: result.total_chunks,
       })
     } catch (error) {
-      console.error('Failed to save to VectorDB:', error)
-      alert('VectorDB 저장에 실패했습니다')
+      logError('VectorDB save', error)
+      alert(getErrorMessage(error))
     } finally {
       setIsSavingToVectorDB(false)
     }
@@ -833,7 +843,7 @@ function PaperCard({ paper }: PaperCardProps) {
           setIsSaved(data.is_saved)
         }
       } catch (error) {
-        console.error('Failed to check saved status:', error)
+        logError('Check saved status', error)
       }
     }
     checkSaved()
@@ -857,8 +867,8 @@ function PaperCard({ paper }: PaperCardProps) {
       setIsSaved(true)
       queryClient.invalidateQueries({ queryKey: ['savedPapers'] })
     } catch (error) {
-      console.error('Failed to save paper:', error)
-      alert('저장에 실패했습니다')
+      logError('Save paper', error)
+      alert(getErrorMessage(error))
     } finally {
       setIsSaving(false)
     }
@@ -879,7 +889,7 @@ function PaperCard({ paper }: PaperCardProps) {
           window.open(info.pdfUrl, '_blank')
         }
       } catch (error) {
-        console.error('Failed to check PDF availability:', error)
+        logError('Check PDF availability', error)
         setPdfInfo({ pmid: paper.pmid, hasPdf: false, isOpenAccess: false })
       } finally {
         setIsCheckingPdf(false)
@@ -907,7 +917,7 @@ function PaperCard({ paper }: PaperCardProps) {
       const response = await searchApi.summarize(paper.abstract, 'ko')
       setKoreanSummary(response.summary)
     } catch (error) {
-      console.error('Failed to fetch Korean summary:', error)
+      logError('Fetch Korean summary', error)
       setSummaryError(true)
       setKoreanSummary(`[요약 실패] ${paper.abstract.substring(0, 200)}...`)
     } finally {

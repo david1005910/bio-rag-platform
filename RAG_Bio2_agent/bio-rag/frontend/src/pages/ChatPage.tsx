@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Send, Loader2, BookOpen, RefreshCw, Database, Search } from 'lucide-react'
+import DOMPurify from 'dompurify'
 import { chatApi } from '@/services/api'
 import { useChatStore } from '@/store/chatStore'
+import { validateChatMessage } from '@/utils/validation'
 import type { ChatMessage } from '@/types'
 
 interface ExtendedChatMessage extends ChatMessage {
@@ -68,17 +70,23 @@ export default function ChatPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if (isLoading) return
+
+    // Validate and sanitize input
+    const validation = validateChatMessage(input)
+    if (!validation.valid || !validation.sanitized) {
+      return
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: validation.sanitized,
       createdAt: new Date().toISOString(),
     }
 
     addMessage(userMessage)
-    queryMutation.mutate(input.trim())
+    queryMutation.mutate(validation.sanitized)
     setInput('')
   }
 
@@ -214,6 +222,12 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
       return <p className="whitespace-pre-wrap text-white">{content}</p>
     }
 
+    // Configure DOMPurify to only allow safe tags
+    const sanitizeConfig = {
+      ALLOWED_TAGS: ['strong', 'em', 'b', 'i'],
+      ALLOWED_ATTR: ['class'],
+    }
+
     // Process markdown-like formatting for AI responses
     const lines = content.split('\n')
     return (
@@ -225,13 +239,16 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
             '<strong class="text-white font-semibold">$1</strong>'
           )
 
+          // Sanitize HTML to prevent XSS
+          const sanitizedLine = DOMPurify.sanitize(processedLine, sanitizeConfig)
+
           // Numbered list items
           if (/^\d+\.\s/.test(line)) {
             return (
               <div
                 key={idx}
                 className="pl-4 border-l-2 border-cyan-400/50"
-                dangerouslySetInnerHTML={{ __html: processedLine }}
+                dangerouslySetInnerHTML={{ __html: sanitizedLine }}
               />
             )
           }
@@ -246,7 +263,7 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
             <p
               key={idx}
               className="leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: processedLine }}
+              dangerouslySetInnerHTML={{ __html: sanitizedLine }}
             />
           )
         })}

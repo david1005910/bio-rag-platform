@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ExternalLink, Bookmark, MessageSquare, Share2, Loader2, FileDown, FileX } from 'lucide-react'
 import { searchApi } from '@/services/api'
+import { logError } from '@/utils/errorHandler'
 import type { PDFInfo } from '@/types'
 
 export default function PaperDetailPage() {
@@ -38,7 +39,7 @@ export default function PaperDetailPage() {
           window.open(info.pdfUrl, '_blank')
         }
       } catch (error) {
-        console.error('Failed to check PDF availability:', error)
+        logError('Check PDF availability', error)
         setPdfInfo({ pmid, hasPdf: false, isOpenAccess: false })
       } finally {
         setIsCheckingPdf(false)
