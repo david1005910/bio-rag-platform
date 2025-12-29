@@ -5,8 +5,8 @@
 /* Custom base styles - Gooey / Liquid Morphism */
 body {
   @apply text-white antialiased;
-  /* Darker gradient for better text readability */
-  background: linear-gradient(135deg, #c2410c 0%, #be185d 35%, #6d28d9 65%, #1d4ed8 100%);
+  /* Medium pastel gradient - balanced for readability */
+  background: linear-gradient(135deg, #f59e0b 0%, #ec4899 25%, #a855f7 50%, #8b5cf6 75%, #3b82f6 100%);
   background-attachment: fixed;
   min-height: 100vh;
 }
@@ -18,30 +18,30 @@ body {
   }
 }
 
-/* Gooey / Liquid Morphism Styles */
+/* Gooey / Liquid Morphism Styles - Pastel Theme */
 @layer components {
-  /* Glossy Panel - enhanced with darker overlay for better text contrast */
+  /* Glossy Panel - frosted glass effect */
   .glossy-panel {
-    background: linear-gradient(135deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.3) 100%),
+    background: linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.25) 100%),
                 linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.08) 100%);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255,255,255,0.25);
     border-radius: 24px;
-    box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.25);
+    box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.2);
   }
 
   .glossy-panel-sm {
-    background: linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.25) 100%),
+    background: linear-gradient(135deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.2) 100%),
                 linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 20px;
-    box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.15);
   }
 
-  /* Glossy Button - enhanced for readability */
+  /* Glossy Button */
   .glossy-btn {
     background: linear-gradient(135deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.2) 100%),
                 linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.1) 100%);
@@ -49,37 +49,37 @@ body {
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,255,0.3);
     border-radius: 16px;
-    box-shadow: inset 0px 1px 2px rgba(255,255,255,0.3), 0px 8px 24px rgba(0,0,0,0.2);
+    box-shadow: inset 0px 1px 2px rgba(255,255,255,0.3), 0px 8px 24px rgba(0,0,0,0.15);
     color: white;
-    text-shadow: 0px 1px 2px rgba(0,0,0,0.5), 0px 2px 6px rgba(0,0,0,0.3);
+    text-shadow: 0px 1px 2px rgba(0,0,0,0.3);
     transition: all 0.3s ease;
   }
 
   .glossy-btn:hover {
-    background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.2) 100%);
+    background: linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.2) 100%);
     transform: translateY(-2px);
     box-shadow: inset 0px 1px 2px rgba(255,255,255,0.4), 0px 12px 32px rgba(0,0,0,0.2);
   }
 
   .glossy-btn-primary {
-    background: linear-gradient(135deg, rgba(139,92,246,0.8) 0%, rgba(236,72,153,0.8) 100%);
+    background: linear-gradient(135deg, rgba(139,92,246,0.85) 0%, rgba(236,72,153,0.85) 100%);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,255,0.3);
     border-radius: 16px;
     box-shadow: inset 0px 1px 2px rgba(255,255,255,0.3), 0px 8px 24px rgba(0,0,0,0.2);
     color: white;
-    text-shadow: 0px 2px 4px rgba(0,0,0,0.3);
+    text-shadow: 0px 1px 2px rgba(0,0,0,0.3);
     transition: all 0.3s ease;
   }
 
   .glossy-btn-primary:hover {
-    background: linear-gradient(135deg, rgba(139,92,246,0.9) 0%, rgba(236,72,153,0.9) 100%);
+    background: linear-gradient(135deg, rgba(139,92,246,0.95) 0%, rgba(236,72,153,0.95) 100%);
     transform: translateY(-2px);
     box-shadow: inset 0px 1px 2px rgba(255,255,255,0.4), 0px 12px 32px rgba(0,0,0,0.25);
   }
 
-  /* Blob shapes */
+  /* Blob shapes - vibrant pastel blobs */
   .blob {
     position: absolute;
     border-radius: 50%;
@@ -88,34 +88,34 @@ body {
   }
 
   .blob-pink {
-    background: radial-gradient(circle, rgba(236,72,153,0.6) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(236,72,153,0.5) 0%, transparent 70%);
   }
 
   .blob-purple {
-    background: radial-gradient(circle, rgba(139,92,246,0.6) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(139,92,246,0.5) 0%, transparent 70%);
   }
 
   .blob-blue {
-    background: radial-gradient(circle, rgba(59,130,246,0.6) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(59,130,246,0.5) 0%, transparent 70%);
   }
 
   .blob-orange {
-    background: radial-gradient(circle, rgba(249,115,22,0.6) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(245,158,11,0.5) 0%, transparent 70%);
   }
 
   .blob-cyan {
-    background: radial-gradient(circle, rgba(6,182,212,0.5) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(6,182,212,0.4) 0%, transparent 70%);
   }
 
-  /* Text styles for liquid morphism - enhanced for better readability */
+  /* Text styles for pastel theme */
   .liquid-text {
     color: white;
-    text-shadow: 0px 1px 2px rgba(0,0,0,0.5), 0px 2px 8px rgba(0,0,0,0.3);
+    text-shadow: 0px 1px 2px rgba(0,0,0,0.4);
   }
 
   .liquid-text-muted {
-    color: rgba(255,255,255,0.9);
-    text-shadow: 0px 1px 3px rgba(0,0,0,0.4), 0px 2px 6px rgba(0,0,0,0.2);
+    color: rgba(255,255,255,0.85);
+    text-shadow: 0px 1px 2px rgba(0,0,0,0.3);
   }
 
   /* Input fields */
@@ -168,7 +168,7 @@ body {
   animation: blob-float 8s ease-in-out 4s infinite;
 }
 
-/* Scrollbar styling - Liquid style */
+/* Scrollbar styling - Pastel style */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
