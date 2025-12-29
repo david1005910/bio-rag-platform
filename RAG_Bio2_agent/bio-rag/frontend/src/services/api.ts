@@ -17,20 +17,49 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
+// CSRF token cookie name (must match backend)
+const CSRF_COOKIE_NAME = 'csrf_token'
+
+/**
+ * Get CSRF token from cookie
+ */
+function getCsrfToken(): string | null {
+  const cookies = document.cookie.split(';')
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=')
+    if (name === CSRF_COOKIE_NAME) {
+      return decodeURIComponent(value)
+    }
+  }
+  return null
+}
+
 // Create axios instance
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Send cookies with requests
 })
 
-// Request interceptor for auth token
+// Request interceptor for auth token and CSRF
 api.interceptors.request.use((config) => {
+  // Add auth token
   const token = localStorage.getItem('accessToken')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+
+  // Add CSRF token for state-changing requests
+  const method = config.method?.toUpperCase()
+  if (method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const csrfToken = getCsrfToken()
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken
+    }
+  }
+
   return config
 })
 
@@ -45,6 +74,17 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+/**
+ * Initialize CSRF token by making a request to get the cookie set
+ */
+export async function initCsrfToken(): Promise<void> {
+  try {
+    await api.get('/csrf-token')
+  } catch (error) {
+    console.warn('Failed to initialize CSRF token:', error)
+  }
+}
 
 // ============== Auth API ==============
 

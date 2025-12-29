@@ -3,10 +3,11 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
+from src.core.csrf import CSRFMiddleware
 from src.core.database import init_db, close_db
 from src.api.v1 import auth, search, chat, library, trends, vectordb
 
@@ -60,8 +61,12 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-CSRF-Token"],
+    expose_headers=["X-CSRF-Token"],
 )
+
+# Add CSRF protection middleware
+app.add_middleware(CSRFMiddleware)
 
 # Register API routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -89,6 +94,14 @@ async def health_check():
         "status": "healthy",
         "environment": settings.APP_ENV
     }
+
+
+@app.get("/api/v1/csrf-token", tags=["Security"])
+async def get_csrf_token(request: Request):
+    """Get CSRF token - this endpoint sets the CSRF cookie"""
+    from src.core.csrf import CSRF_COOKIE_NAME
+    token = request.cookies.get(CSRF_COOKIE_NAME, "")
+    return {"csrf_token": token}
 
 
 if __name__ == "__main__":
