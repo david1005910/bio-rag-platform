@@ -1,25 +1,21 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Library, Tag, Trash2, ExternalLink, MessageSquare, Loader2, BookOpen, Search as SearchIcon, Database, FolderOpen, FileDown, FileX, ChevronRight, ChevronDown, Code, FileText } from 'lucide-react'
+import { Library, Tag, Trash2, ExternalLink, MessageSquare, Loader2, Search as SearchIcon, FolderOpen, FileDown, FileX, ChevronRight, ChevronDown, Code, FileText } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { libraryApi, vectordbApi, searchApi } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import type { PDFInfo } from '@/types'
 
-type TabType = 'saved' | 'vectordb'
-
 export default function LibraryPage() {
   // Note: isAuthenticated can be used for future login check
   useAuthStore()  // Keep store subscription for future use
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<TabType>('vectordb')
   const queryClient = useQueryClient()
 
   // 저장된 Meta 데이터 - vectordb_metadata.json에서 자동 저장된 전체 메타데이터
   const { data: metadataResponse, isLoading } = useQuery({
     queryKey: ['vectordbMetadata'],
     queryFn: () => vectordbApi.getMetadata(),
-    enabled: activeTab === 'saved',
   })
 
   // Convert metadata to SavedPaper format for compatibility
@@ -34,12 +30,6 @@ export default function LibraryPage() {
     notes: undefined,
     saved_at: p.indexed_at
   }))
-
-  const { data: vectordbPapers, isLoading: isLoadingVectorDB } = useQuery({
-    queryKey: ['vectordbPapers'],
-    queryFn: () => vectordbApi.getPapers(),
-    enabled: activeTab === 'vectordb',
-  })
 
   // Tags are not used for auto-saved metadata (no user tags)
   const tags: string[] = []
@@ -67,7 +57,7 @@ export default function LibraryPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold liquid-text">내 라이브러리</h1>
-          <p className="liquid-text-muted mt-1">인덱싱된 논문 및 저장된 Meta 데이터를 관리하세요</p>
+          <p className="liquid-text-muted mt-1">저장된 Meta 데이터를 관리하세요</p>
         </div>
         <div className="flex items-center gap-3">
           {/* 논문 검색 버튼 */}
@@ -80,105 +70,16 @@ export default function LibraryPage() {
           </Link>
           {/* 통계 표시 */}
           <div className="flex items-center gap-2 bg-white/60 px-4 py-2 rounded-xl border border-slate-200">
-            {activeTab === 'vectordb' ? (
-              <>
-                <Database className="text-purple-500" size={24} />
-                <span className="text-slate-700 font-medium">
-                  {vectordbPapers?.total || 0}개의 인덱싱 논문
-                </span>
-              </>
-            ) : (
-              <>
-                <BookOpen className="text-purple-500" size={24} />
-                <span className="text-slate-700 font-medium">
-                  {papersData?.length || 0}개의 Meta 데이터
-                </span>
-              </>
-            )}
+            <FolderOpen className="text-purple-500" size={24} />
+            <span className="text-slate-700 font-medium">
+              {papersData?.length || 0}개의 Meta 데이터
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setActiveTab('vectordb')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-medium ${
-            activeTab === 'vectordb'
-              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-              : 'bg-white/60 text-slate-600 hover:bg-white/80 border border-slate-200'
-          }`}
-        >
-          <Database size={18} />
-          VectorDB 인덱싱 논문
-          {vectordbPapers?.total ? (
-            <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
-              activeTab === 'vectordb' ? 'bg-white/20' : 'bg-purple-100 text-purple-600'
-            }`}>
-              {vectordbPapers.total}
-            </span>
-          ) : null}
-        </button>
-        <button
-          onClick={() => setActiveTab('saved')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-medium ${
-            activeTab === 'saved'
-              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-              : 'bg-white/60 text-slate-600 hover:bg-white/80 border border-slate-200'
-          }`}
-        >
-          <FolderOpen size={18} />
-          저장된 Meta 데이터
-          {papersData?.length ? (
-            <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
-              activeTab === 'saved' ? 'bg-white/20' : 'bg-purple-100 text-purple-600'
-            }`}>
-              {papersData.length}
-            </span>
-          ) : null}
-        </button>
-      </div>
-
-      {/* VectorDB Papers Tab */}
-      {activeTab === 'vectordb' && (
-        <div>
-          {isLoadingVectorDB ? (
-            <div className="flex justify-center py-12">
-              <div className="flex items-center gap-3 text-slate-600">
-                <Loader2 className="animate-spin text-purple-500" size={24} />
-                <span>VectorDB 논문을 불러오는 중...</span>
-              </div>
-            </div>
-          ) : vectordbPapers && vectordbPapers.papers.length > 0 ? (
-            <div className="glossy-panel p-4">
-              {vectordbPapers.papers.map((paper, index) => (
-                <VectorDBPaperItem key={paper.id} paper={paper} index={index + 1} />
-              ))}
-            </div>
-          ) : (
-            <div className="glossy-panel p-12 text-center">
-              <Database className="mx-auto text-purple-300 mb-4" size={48} />
-              <h3 className="text-lg font-medium text-slate-800 mb-2">
-                인덱싱된 논문이 없습니다
-              </h3>
-              <p className="liquid-text-muted mb-6">
-                논문 검색 후 "논문 인덱싱" 버튼을 클릭하여 VectorDB에 저장하세요
-              </p>
-              <Link
-                to="/search"
-                className="glossy-btn-primary inline-flex items-center gap-2 px-6 py-3"
-              >
-                <SearchIcon size={18} />
-                논문 검색하기
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Saved Papers Tab */}
-      {activeTab === 'saved' && (
-        showLoginPrompt ? (
+      {/* Saved Papers Content */}
+      {showLoginPrompt ? (
           <div className="glossy-panel p-12 text-center">
             <Library className="mx-auto text-white/30 mb-4" size={64} />
             <h2 className="text-2xl font-bold text-white mb-2">로그인이 필요합니다</h2>
@@ -273,92 +174,6 @@ export default function LibraryPage() {
                 </Link>
               </div>
             )}
-          </div>
-        </div>
-        )
-      )}
-    </div>
-  )
-}
-
-// VectorDB Paper Item Component (목차 형태)
-interface VectorDBPaper {
-  id: string
-  pmid: string
-  title: string
-  abstract: string
-  journal?: string
-  authors: string[]
-  keywords: string[]
-}
-
-function VectorDBPaperItem({ paper, index }: { paper: VectorDBPaper; index: number }) {
-  const [isExpanded, setIsExpanded] = useState(false)
-
-  return (
-    <div className="transition-all bg-white/50 rounded-xl mb-2 border border-slate-200">
-      {/* 제목 행 (목차) */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-50 transition-colors text-left rounded-xl"
-      >
-        {/* 번호 - 더 눈에 띄게 */}
-        <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold text-sm flex items-center justify-center shadow-md">
-          {index}
-        </span>
-        {isExpanded ? (
-          <ChevronDown size={16} className="text-purple-500 flex-shrink-0" />
-        ) : (
-          <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
-        )}
-        <span className="flex-1 text-slate-800 font-medium line-clamp-1">{paper.title}</span>
-        <span className="text-xs text-slate-500 flex-shrink-0 bg-slate-100 px-2 py-1 rounded-lg">PMID: {paper.pmid}</span>
-      </button>
-
-      {/* 펼쳐진 상세 정보 */}
-      {isExpanded && (
-        <div className="px-4 pb-4 pt-1 ml-11 border-l-2 border-purple-300">
-          <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
-            {paper.journal && <span>{paper.journal}</span>}
-            <span className="px-2 py-0.5 bg-purple-100 text-purple-600 rounded text-xs font-medium">
-              <Database size={10} className="inline mr-1" />
-              VectorDB
-            </span>
-          </div>
-
-          <p className="text-sm text-slate-600 mb-3 line-clamp-3">
-            {paper.abstract}
-          </p>
-
-          {paper.keywords && paper.keywords.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-3">
-              {paper.keywords.slice(0, 5).map((keyword) => (
-                <span
-                  key={keyword}
-                  className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium"
-                >
-                  {keyword}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
-            <Link
-              to={`/paper/${paper.pmid}`}
-              className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors"
-            >
-              <ExternalLink size={14} />
-              상세보기
-            </Link>
-            <Link
-              to={`/chat?pmid=${paper.pmid}`}
-              className="flex items-center gap-1 text-sm text-pink-600 hover:text-pink-700 font-medium transition-colors"
-            >
-              <MessageSquare size={14} />
-              AI 질문
-            </Link>
-            <PdfButton pmid={paper.pmid} />
           </div>
         </div>
       )}
