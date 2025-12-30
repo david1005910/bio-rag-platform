@@ -78,7 +78,7 @@ export default function PaperDetailPage() {
       {/* Back button */}
       <Link
         to="/search"
-        className="inline-flex items-center gap-2 text-white/70 hover:text-white mb-6 transition-colors"
+        className="inline-flex items-center gap-2 text-slate-600 hover:text-purple-600 mb-6 transition-colors"
       >
         <ArrowLeft size={20} />
         검색으로 돌아가기
@@ -86,19 +86,19 @@ export default function PaperDetailPage() {
 
       {/* Paper header */}
       <div className="glossy-panel p-8 mb-6">
-        <h1 className="text-2xl font-bold text-white mb-4">{paper.title}</h1>
+        <h1 className="text-2xl font-bold text-slate-800 mb-4">{paper.title}</h1>
 
-        <div className="flex flex-wrap gap-4 text-sm text-white/60 mb-6">
-          <span className="px-3 py-1 bg-white/10 rounded-full">PMID: {paper.pmid}</span>
-          <span className="px-3 py-1 bg-white/10 rounded-full">{paper.journal}</span>
+        <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-6">
+          <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full border border-purple-200">PMID: {paper.pmid}</span>
+          <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">{paper.journal}</span>
           {paper.publicationDate && (
-            <span className="px-3 py-1 bg-white/10 rounded-full">{paper.publicationDate}</span>
+            <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">{paper.publicationDate}</span>
           )}
         </div>
 
         {paper.authors.length > 0 && (
-          <div className="text-white/80 mb-6">
-            <span className="font-medium text-cyan-300">저자: </span>
+          <div className="text-slate-700 mb-6">
+            <span className="font-medium text-purple-600">저자: </span>
             {paper.authors.join(', ')}
           </div>
         )}
@@ -179,8 +179,8 @@ export default function PaperDetailPage() {
 
       {/* Abstract */}
       <div className="glossy-panel p-8 mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4">초록 (Abstract)</h2>
-        <p className="text-white/80 leading-relaxed whitespace-pre-wrap">
+        <h2 className="text-lg font-semibold text-slate-800 mb-4">초록 (Abstract)</h2>
+        <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
           {paper.abstract || '초록 정보가 없습니다.'}
         </p>
       </div>
@@ -188,12 +188,12 @@ export default function PaperDetailPage() {
       {/* Keywords */}
       {paper.keywords && paper.keywords.length > 0 && (
         <div className="glossy-panel p-8 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4">키워드</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">키워드</h2>
           <div className="flex flex-wrap gap-2">
             {paper.keywords.map((keyword) => (
               <span
                 key={keyword}
-                className="px-3 py-1 bg-cyan-500/20 text-cyan-200 rounded-full text-sm border border-cyan-400/30"
+                className="px-3 py-1 bg-cyan-100 text-cyan-700 rounded-full text-sm border border-cyan-300 font-medium"
               >
                 {keyword}
               </span>
@@ -205,12 +205,12 @@ export default function PaperDetailPage() {
       {/* MeSH Terms */}
       {paper.meshTerms && paper.meshTerms.length > 0 && (
         <div className="glossy-panel p-8 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4">MeSH 용어</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">MeSH 용어</h2>
           <div className="flex flex-wrap gap-2">
             {paper.meshTerms.map((term) => (
               <span
                 key={term}
-                className="px-3 py-1 bg-pink-500/20 text-pink-200 rounded-full text-sm border border-pink-400/30"
+                className="px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-sm border border-pink-300 font-medium"
               >
                 {term}
               </span>
@@ -222,24 +222,24 @@ export default function PaperDetailPage() {
       {/* Similar Papers */}
       {similarPapers && similarPapers.length > 0 && (
         <div className="glossy-panel p-8">
-          <h2 className="text-lg font-semibold text-white mb-4">유사 논문</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">유사 논문</h2>
           <div className="space-y-4">
             {similarPapers.map((similar) => (
               <Link
                 key={similar.pmid}
                 to={`/paper/${similar.pmid}`}
-                className="block p-4 bg-white/10 rounded-xl hover:bg-white/20 transition-colors border border-white/10"
+                className="block p-4 bg-white/50 rounded-xl hover:bg-purple-50 transition-colors border border-slate-200"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <div className="font-medium text-white">{similar.title}</div>
-                    <div className="text-sm text-white/50 mt-1">
+                    <div className="font-medium text-slate-800">{similar.title}</div>
+                    <div className="text-sm text-slate-500 mt-1">
                       PMID: {similar.pmid}
                     </div>
                     {similar.common_keywords && similar.common_keywords.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {similar.common_keywords.map((kw: string) => (
-                          <span key={kw} className="px-2 py-0.5 bg-cyan-500/20 text-cyan-200 rounded text-xs">
+                          <span key={kw} className="px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded text-xs">
                             {kw}
                           </span>
                         ))}
@@ -247,7 +247,7 @@ export default function PaperDetailPage() {
                     )}
                   </div>
                   {similar.similarity_score && (
-                    <div className="px-2 py-1 bg-green-500/30 text-green-200 rounded text-sm font-medium border border-green-400/30">
+                    <div className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium border border-green-300">
                       {Math.round(similar.similarity_score * 100)}%
                     </div>
                   )}
