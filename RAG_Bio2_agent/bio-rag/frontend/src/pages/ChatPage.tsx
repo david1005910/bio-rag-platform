@@ -44,11 +44,24 @@ export default function ChatPage() {
       setLoading(true)
     },
     onSuccess: (data) => {
+      // Deduplicate sources by PMID, keeping the one with highest relevance score
+      const uniqueSources = data.sources
+        ? Array.from(
+            data.sources.reduce((map, source) => {
+              const existing = map.get(source.pmid)
+              if (!existing || source.relevance > existing.relevance) {
+                map.set(source.pmid, source)
+              }
+              return map
+            }, new Map())
+          ).map(([, source]) => source)
+        : []
+
       const assistantMessage: ExtendedChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
         content: data.answer,
-        sources: data.sources,
+        sources: uniqueSources,
         createdAt: new Date().toISOString(),
         vectordbUsed: data.vectordbUsed,
         searchMode: data.searchMode,

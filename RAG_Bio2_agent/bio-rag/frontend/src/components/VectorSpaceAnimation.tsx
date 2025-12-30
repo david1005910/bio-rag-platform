@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Text, OrbitControls, Line, Sphere, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { Play, Pause, Zap, Search, Info, Layers, Loader2, Database, AlertCircle } from 'lucide-react'
-import { searchApi, vectordbApi, trendsApi } from '@/services/api'
+import { searchApi, vectordbApi } from '@/services/api'
 
 // Multi-level semantic similarity data
 // Level 1-6: Hierarchical relations to search term
@@ -32,12 +32,15 @@ interface PaperResult {
   relevanceScore: number
 }
 
-interface VectorSearchResult {
+interface VectorDBPaper {
+  id?: string
   pmid: string
   title: string
-  score: number
-  dense_score?: number
-  sparse_score?: number
+  abstract?: string
+  keywords?: string[]
+  authors?: string[]
+  journal?: string
+  indexed_at?: string
 }
 
 const SEMANTIC_DATA: Record<string, SearchTermData> = {
@@ -1929,137 +1932,248 @@ function generateSemanticNetwork(query: string): SearchTermData {
   }
 }
 
-// Function to build network data from API search results
+// Function to extract key terms from text chunk
+function extractKeyTerms(text: string): string[] {
+  if (!text || text.length === 0) return []
+
+  // Biomedical stopwords to filter out
+  const stopwords = new Set([
+    'the', 'and', 'or', 'of', 'in', 'to', 'for', 'with', 'on', 'at', 'by', 'from',
+    'was', 'were', 'been', 'have', 'has', 'had', 'is', 'are', 'be', 'this', 'that',
+    'which', 'who', 'what', 'where', 'when', 'how', 'why', 'all', 'each', 'every',
+    'both', 'few', 'more', 'most', 'other', 'some', 'such', 'than', 'too', 'very',
+    'can', 'will', 'just', 'may', 'should', 'could', 'would', 'might', 'must',
+    'a', 'an', 'as', 'but', 'if', 'not', 'only', 'same', 'so', 'also', 'into',
+    'study', 'studies', 'results', 'conclusion', 'methods', 'background', 'objective',
+    'using', 'used', 'use', 'based', 'showed', 'found', 'suggest', 'suggests',
+    'included', 'including', 'associated', 'significant', 'significantly'
+  ])
+
+  // Biomedical terms patterns to prioritize
+  const biomedicalPatterns = /\b(gene|protein|receptor|enzyme|mutation|variant|pathway|cell|tumor|cancer|therapy|treatment|drug|inhibitor|antibody|biomarker|expression|level|activity|patient|disease|syndrome|disorder|infection|virus|bacteria|immune|inflammatory|clinical|trial|outcome|survival|response|resistance|diagnosis|prognosis)\b/gi
+
+  // Extract words, prioritizing biomedical terms
+  const words = text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 3 && !stopwords.has(word))
+
+  // Count word frequency
+  const wordCount = new Map<string, number>()
+  words.forEach(word => {
+    wordCount.set(word, (wordCount.get(word) || 0) + 1)
+  })
+
+  // Find biomedical terms in original text
+  const bioTerms = new Set<string>()
+  let match
+  while ((match = biomedicalPatterns.exec(text)) !== null) {
+    bioTerms.add(match[0].toLowerCase())
+  }
+
+  // Sort by frequency and biomedical relevance
+  const sortedWords = Array.from(wordCount.entries())
+    .sort((a, b) => {
+      const aIsBio = bioTerms.has(a[0]) ? 10 : 0
+      const bIsBio = bioTerms.has(b[0]) ? 10 : 0
+      return (b[1] + bIsBio) - (a[1] + aIsBio)
+    })
+    .map(([word]) => word)
+
+  return sortedWords.slice(0, 5)
+}
+
+// Function to build network data from VectorDB and API search results
 async function buildNetworkFromSearch(query: string): Promise<SearchTermData | null> {
   try {
-    // 1. Search for papers using the query
-    const searchResponse = await searchApi.search(query, 10, undefined, 'pubmed')
-    const papers = searchResponse.results as unknown as PaperResult[]
+    const relations: WordRelation[] = []
+    const addedWords = new Set<string>()
+    let vectorDbUsed = false
+    let paperCount = 0
 
-    // If no API results, generate semantic network from query
-    if (papers.length === 0) {
-      console.log('No API results, generating semantic network from query')
+    // 1. PRIMARY: Try VectorDB search first (indexed papers with embeddings)
+    try {
+      console.log('Searching VectorDB for:', query)
+      const vectorResponse = await vectordbApi.search(query, 10, 'hybrid', 0.7)
+      const vectorResults = vectorResponse.results
+
+      if (vectorResults && vectorResults.length > 0) {
+        vectorDbUsed = true
+        paperCount = vectorResults.length
+        console.log(`Found ${vectorResults.length} results in VectorDB`)
+
+        // Get full paper metadata for richer information
+        let papersMetadata: VectorDBPaper[] = []
+        try {
+          const metadataResponse = await vectordbApi.getMetadata()
+          papersMetadata = metadataResponse.papers || []
+        } catch {
+          console.log('Could not get paper metadata')
+        }
+
+        // Build network from vector search results
+        vectorResults.slice(0, 6).forEach((result, idx) => {
+          const paperTitle = result.title.length > 45
+            ? result.title.substring(0, 45) + '...'
+            : result.title
+
+          if (addedWords.has(paperTitle.toLowerCase())) return
+          addedWords.add(paperTitle.toLowerCase())
+
+          // Find full paper metadata
+          const paperMeta = papersMetadata.find(p => p.pmid === result.pmid)
+          const keywords = paperMeta?.keywords || []
+
+          // Extract key terms from text chunk
+          const textTerms = extractKeyTerms(result.text)
+
+          // Level 2: Keywords and text terms
+          const level2Children: WordRelation[] = []
+
+          // Add keywords
+          keywords.slice(0, 3).forEach((kw, kwIdx) => {
+            if (!addedWords.has(kw.toLowerCase())) {
+              addedWords.add(kw.toLowerCase())
+
+              // Level 3: Get ontology connections for keywords
+              const ontologyData = BIOMEDICAL_ONTOLOGY[kw.toLowerCase()]
+              const level3Children: WordRelation[] = []
+
+              if (ontologyData) {
+                ontologyData.related.slice(0, 2).forEach((rel, relIdx) => {
+                  if (!addedWords.has(rel.toLowerCase())) {
+                    addedWords.add(rel.toLowerCase())
+                    level3Children.push({
+                      word: rel,
+                      similarity: 0.65 - relIdx * 0.05,
+                      category: '연관개념'
+                    })
+                  }
+                })
+              }
+
+              level2Children.push({
+                word: kw,
+                similarity: 0.78 - kwIdx * 0.04,
+                category: '키워드',
+                children: level3Children.length > 0 ? level3Children : undefined
+              })
+            }
+          })
+
+          // Add extracted text terms
+          textTerms.slice(0, 3).forEach((term, tIdx) => {
+            if (!addedWords.has(term.toLowerCase())) {
+              addedWords.add(term.toLowerCase())
+              level2Children.push({
+                word: term,
+                similarity: 0.70 - tIdx * 0.05,
+                category: '추출어'
+              })
+            }
+          })
+
+          // Calculate display score (normalize to 0-1 if needed)
+          const displayScore = result.score > 1 ? result.score / 100 : result.score
+
+          relations.push({
+            word: paperTitle,
+            similarity: Math.min(0.98, displayScore + 0.1 - idx * 0.03),
+            category: '벡터DB논문',
+            children: level2Children.length > 0 ? level2Children : undefined
+          })
+
+          // Add score info as metadata
+          if (result.dense_score !== undefined && result.sparse_score !== undefined) {
+            const scoreInfo = `Dense: ${(result.dense_score * 100).toFixed(0)}% / Sparse: ${(result.sparse_score * 100).toFixed(0)}%`
+            if (!addedWords.has(scoreInfo)) {
+              addedWords.add(scoreInfo)
+              // Add as child of paper showing score breakdown
+            }
+          }
+        })
+      }
+    } catch (err) {
+      console.log('VectorDB search failed:', err)
+    }
+
+    // 2. SECONDARY: If VectorDB has few results, supplement with PubMed API
+    if (relations.length < 3) {
+      try {
+        console.log('Supplementing with PubMed API search')
+        const searchResponse = await searchApi.search(query, 10, undefined, 'pubmed')
+        const papers = searchResponse.results as unknown as PaperResult[]
+
+        if (papers && papers.length > 0) {
+          papers.slice(0, Math.max(3, 5 - relations.length)).forEach((paper, idx) => {
+            const paperTitle = paper.title.length > 45
+              ? paper.title.substring(0, 45) + '...'
+              : paper.title
+
+            if (addedWords.has(paperTitle.toLowerCase())) return
+            addedWords.add(paperTitle.toLowerCase())
+
+            const paperKeywords = paper.keywords || []
+            const level2Children: WordRelation[] = paperKeywords.slice(0, 3).map((kw, kwIdx) => {
+              if (addedWords.has(kw.toLowerCase())) return null
+              addedWords.add(kw.toLowerCase())
+              return {
+                word: kw,
+                similarity: 0.75 - kwIdx * 0.04,
+                category: '키워드'
+              }
+            }).filter((c): c is WordRelation => c !== null)
+
+            relations.push({
+              word: paperTitle,
+              similarity: 0.85 - idx * 0.06,
+              category: 'PubMed논문',
+              children: level2Children.length > 0 ? level2Children : undefined
+            })
+            paperCount++
+          })
+        }
+      } catch (err) {
+        console.log('PubMed API search failed:', err)
+      }
+    }
+
+    // 3. ALWAYS: Add semantic ontology connections for query terms
+    const semanticData = generateSemanticNetwork(query)
+    if (semanticData && semanticData.relations) {
+      // Add top semantic relations that aren't already present
+      semanticData.relations.slice(0, 4).forEach((rel) => {
+        if (!addedWords.has(rel.word.toLowerCase())) {
+          addedWords.add(rel.word.toLowerCase())
+          relations.push({
+            ...rel,
+            similarity: rel.similarity * 0.9, // Slightly lower than direct matches
+            category: rel.category === '핵심개념' ? '의미연관' : rel.category
+          })
+        }
+      })
+    }
+
+    // If still no results, return full semantic network
+    if (relations.length === 0) {
+      console.log('No results from any source, using semantic network')
       return generateSemanticNetwork(query)
     }
 
-    // 2. Try to get trend analysis for related topics
-    let relatedTopics: string[] = []
-    let keyTrends: string[] = []
-    try {
-      const trendAnalysis = await trendsApi.analyzeTrend(query, 'en')
-      relatedTopics = trendAnalysis.relatedTopics || []
-      keyTrends = trendAnalysis.keyTrends || []
-    } catch {
-      console.log('Trend analysis not available, using paper keywords')
+    // Build description
+    let description = `"${query}" `
+    if (vectorDbUsed) {
+      description += `벡터DB 검색 결과 (${paperCount}편, Hybrid Search)`
+    } else if (paperCount > 0) {
+      description += `PubMed 검색 결과 (${paperCount}편)`
+    } else {
+      description += '의미적 유사어 네트워크'
     }
-
-    // 3. Try vector search for semantic similarity scores
-    let vectorResults: VectorSearchResult[] = []
-    try {
-      const vectorResponse = await vectordbApi.search(query, 10, 'hybrid', 0.7)
-      vectorResults = vectorResponse.results
-    } catch {
-      console.log('Vector search not available')
-    }
-
-    // 4. Build hierarchical network structure
-    // Level 1: Top papers (by relevance)
-    // Level 2: Keywords from each paper
-    // Level 3: Related topics / Key trends
-    // Level 4-6: Extended keyword relationships
-
-    const relations: WordRelation[] = []
-
-    // Collect all keywords for deeper levels
-    const allKeywords: Set<string> = new Set()
-    const keywordPaperMap: Map<string, string[]> = new Map()
-
-    // Level 1: Top papers with their keywords as children
-    papers.slice(0, 5).forEach((paper, idx) => {
-      const paperTitle = paper.title.length > 40
-        ? paper.title.substring(0, 40) + '...'
-        : paper.title
-
-      // Find vector score if available
-      const vectorResult = vectorResults.find(v => v.pmid === paper.pmid)
-      const similarity = vectorResult?.score || (0.95 - idx * 0.08)
-
-      const paperKeywords = paper.keywords || []
-      paperKeywords.forEach(kw => {
-        allKeywords.add(kw.toLowerCase())
-        const existing = keywordPaperMap.get(kw.toLowerCase()) || []
-        existing.push(paper.pmid)
-        keywordPaperMap.set(kw.toLowerCase(), existing)
-      })
-
-      // Level 2: Keywords from this paper
-      const level2Children: WordRelation[] = paperKeywords.slice(0, 4).map((keyword, kwIdx) => {
-        // Level 3: Related topics connected to this keyword
-        const matchingTopics = relatedTopics.filter(topic =>
-          topic.toLowerCase().includes(keyword.toLowerCase()) ||
-          keyword.toLowerCase().includes(topic.toLowerCase().split(' ')[0])
-        )
-
-        const level3Children: WordRelation[] = matchingTopics.slice(0, 2).map((topic, tIdx) => {
-          // Level 4: Key trends
-          const matchingTrends = keyTrends.filter(trend =>
-            trend.toLowerCase().includes(topic.toLowerCase().split(' ')[0])
-          )
-
-          const level4Children: WordRelation[] = matchingTrends.slice(0, 2).map((trend, trIdx) => ({
-            word: trend,
-            similarity: 0.65 - trIdx * 0.05,
-            category: '트렌드',
-            children: [] // Level 5-6 could be added here
-          }))
-
-          return {
-            word: topic,
-            similarity: 0.72 - tIdx * 0.04,
-            category: '관련주제',
-            children: level4Children.length > 0 ? level4Children : undefined
-          }
-        })
-
-        return {
-          word: keyword,
-          similarity: 0.82 - kwIdx * 0.03,
-          category: '키워드',
-          children: level3Children.length > 0 ? level3Children : undefined
-        }
-      })
-
-      relations.push({
-        word: paperTitle,
-        similarity,
-        category: '논문',
-        children: level2Children.length > 0 ? level2Children : undefined
-      })
-    })
-
-    // Add related topics as additional Level 1 nodes
-    relatedTopics.slice(0, 3).forEach((topic, idx) => {
-      const relatedKeywords = Array.from(allKeywords)
-        .filter(kw => topic.toLowerCase().includes(kw.split(' ')[0]))
-        .slice(0, 3)
-
-      const topicChildren: WordRelation[] = relatedKeywords.map((kw, kwIdx) => ({
-        word: kw,
-        similarity: 0.75 - kwIdx * 0.05,
-        category: '키워드'
-      }))
-
-      relations.push({
-        word: topic,
-        similarity: 0.78 - idx * 0.06,
-        category: '관련주제',
-        children: topicChildren.length > 0 ? topicChildren : undefined
-      })
-    })
 
     return {
       centerWord: query,
-      description: `"${query}" 검색 결과 기반 벡터 스페이스 관계도 (논문 ${papers.length}편)`,
+      description,
       relations,
       isFromApi: true
     }
