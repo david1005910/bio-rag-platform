@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Filter, ExternalLink, MessageSquare, Bookmark, BookmarkCheck, Languages, Loader2, Database, CheckCircle, X, Calendar, BookOpen, Users, TrendingUp, ChevronLeft, ChevronRight, FileDown, FileX } from 'lucide-react'
+import { Search, Filter, ExternalLink, MessageSquare, Bookmark, BookmarkCheck, Languages, Loader2, Database, CheckCircle, X, Calendar, BookOpen, Users, TrendingUp, ChevronLeft, ChevronRight, FileDown, FileX, Globe, Beaker, GraduationCap } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { searchApi, libraryApi, vectordbApi } from '@/services/api'
+import { searchArxiv, searchCrossRef, type ExternalPaper, type ExternalSearchResponse } from '@/services/externalApis'
 import { useAuthStore } from '@/store/authStore'
 import { useSearchStore } from '@/store/searchStore'
 import { validateSearchQuery, validateYearParam, validateStringArrayParam } from '@/utils/validation'
@@ -779,7 +780,7 @@ export default function SearchPage() {
       {/* Empty state */}
       {!searchTerm && (
         <div className="text-center py-16">
-          <Search className="mx-auto text-white/30 mb-4" size={64} />
+          <Search className="mx-auto text-purple-300 mb-4" size={64} />
           <h3 className="text-xl font-medium liquid-text mb-2">
             검색어를 입력하세요
           </h3>
@@ -807,6 +808,235 @@ export default function SearchPage() {
           </div>
         </div>
       )}
+
+      {/* External Sources Section */}
+      {searchTerm && (
+        <ExternalSourcesSection query={isKoreanSearch ? translatedQuery : searchTerm} />
+      )}
+    </div>
+  )
+}
+
+// External Sources Section Component
+function ExternalSourcesSection({ query }: { query: string }) {
+  const [activeSource, setActiveSource] = useState<'arxiv' | 'crossref' | null>(null)
+  const [results, setResults] = useState<ExternalSearchResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const searchExternalSource = async (source: 'arxiv' | 'crossref') => {
+    if (activeSource === source && results) {
+      // Toggle off
+      setActiveSource(null)
+      setResults(null)
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+    setActiveSource(source)
+
+    try {
+      const response = source === 'arxiv'
+        ? await searchArxiv(query, 10)
+        : await searchCrossRef(query, 10)
+      setResults(response)
+    } catch (err) {
+      setError(`${source} 검색 중 오류가 발생했습니다.`)
+      console.error(err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="mt-8 glossy-panel p-6">
+      <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+        <Globe className="text-purple-500" size={20} />
+        외부 논문 데이터베이스 검색
+      </h3>
+      <p className="text-sm text-slate-600 mb-4">
+        과학/공학 분야 논문을 외부 데이터베이스에서 검색합니다.
+      </p>
+
+      {/* Source buttons */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <button
+          onClick={() => searchExternalSource('arxiv')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
+            activeSource === 'arxiv'
+              ? 'bg-gradient-to-r from-red-400 to-orange-400 text-white shadow-lg'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <Beaker size={18} />
+          arXiv
+          <span className="text-xs opacity-75">(물리/수학/CS)</span>
+        </button>
+
+        <button
+          onClick={() => searchExternalSource('crossref')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
+            activeSource === 'crossref'
+              ? 'bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow-lg'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <GraduationCap size={18} />
+          CrossRef
+          <span className="text-xs opacity-75">(전 분야)</span>
+        </button>
+      </div>
+
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="animate-spin text-purple-500 mr-2" size={24} />
+          <span className="text-slate-600">검색 중...</span>
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* Results */}
+      {results && !isLoading && (
+        <div className="space-y-4">
+          <div className="text-sm text-slate-600 mb-2">
+            <span className="font-medium text-purple-600">{results.source}</span>에서{' '}
+            <span className="font-semibold">{results.total.toLocaleString()}</span>건 중{' '}
+            <span className="font-semibold">{results.papers.length}</span>건 표시
+          </div>
+
+          {results.papers.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              검색 결과가 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {results.papers.map((paper) => (
+                <ExternalPaperCard key={paper.id} paper={paper} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Info when no source selected */}
+      {!activeSource && !isLoading && (
+        <div className="text-center py-6 text-slate-500">
+          <Globe className="mx-auto mb-2 opacity-30" size={40} />
+          <p>위 버튼을 클릭하여 외부 데이터베이스를 검색하세요</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// External Paper Card Component
+function ExternalPaperCard({ paper }: { paper: ExternalPaper }) {
+  const [showAbstract, setShowAbstract] = useState(false)
+
+  const sourceColors = {
+    arxiv: 'bg-gradient-to-r from-red-100 to-orange-100 text-red-700',
+    crossref: 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700',
+    semanticscholar: 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700',
+  }
+
+  const sourceLabels = {
+    arxiv: 'arXiv',
+    crossref: 'CrossRef',
+    semanticscholar: 'Semantic Scholar',
+  }
+
+  return (
+    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex-1">
+          <h4 className="font-medium text-slate-800 leading-snug">
+            {paper.title}
+          </h4>
+        </div>
+        <span className={`text-xs px-2 py-1 rounded-lg font-medium ${sourceColors[paper.source]}`}>
+          {sourceLabels[paper.source]}
+        </span>
+      </div>
+
+      {/* Authors and Year */}
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 mb-2">
+        {paper.authors.length > 0 && (
+          <span className="flex items-center gap-1">
+            <Users size={14} />
+            {paper.authors.slice(0, 3).join(', ')}
+            {paper.authors.length > 3 && ` 외 ${paper.authors.length - 3}명`}
+          </span>
+        )}
+        {paper.year && (
+          <span className="flex items-center gap-1">
+            <Calendar size={14} />
+            {paper.year}
+          </span>
+        )}
+      </div>
+
+      {/* Categories (for arXiv) */}
+      {paper.categories && paper.categories.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {paper.categories.slice(0, 3).map((cat) => (
+            <span key={cat} className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+              {cat}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Abstract toggle */}
+      {paper.abstract && (
+        <div className="mb-2">
+          <button
+            onClick={() => setShowAbstract(!showAbstract)}
+            className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+          >
+            {showAbstract ? '초록 숨기기 ▲' : '초록 보기 ▼'}
+          </button>
+          {showAbstract && (
+            <p className="mt-2 text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg">
+              {paper.abstract.length > 500
+                ? `${paper.abstract.substring(0, 500)}...`
+                : paper.abstract}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-100">
+        <a
+          href={paper.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 font-medium"
+        >
+          <ExternalLink size={14} />
+          논문 보기
+        </a>
+        {paper.doi && (
+          <a
+            href={`https://doi.org/${paper.doi}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+          >
+            <BookOpen size={14} />
+            DOI
+          </a>
+        )}
+      </div>
     </div>
   )
 }
