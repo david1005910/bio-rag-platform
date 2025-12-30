@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Send, Loader2, BookOpen, RefreshCw, Database, Search } from 'lucide-react'
+import { Send, Loader2, BookOpen, RefreshCw, Database, Search, ExternalLink, FileText, ChevronUp, ChevronDown } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { chatApi } from '@/services/api'
 import { useChatStore } from '@/store/chatStore'
@@ -103,10 +104,34 @@ export default function ChatPage() {
     setInput('')
   }
 
+  // Collect all unique sources from messages
+  const allSources = useMemo(() => {
+    const sourcesMap = new Map<string, { pmid: string; title: string; relevance: number }>()
+    messages.forEach((msg) => {
+      if (msg.sources) {
+        msg.sources.forEach((source) => {
+          const existing = sourcesMap.get(source.pmid)
+          if (!existing || source.relevance > existing.relevance) {
+            sourcesMap.set(source.pmid, {
+              pmid: source.pmid,
+              title: source.title,
+              relevance: source.relevance,
+            })
+          }
+        })
+      }
+    })
+    return Array.from(sourcesMap.values()).sort((a, b) => b.relevance - a.relevance)
+  }, [messages])
+
+  const [showSourcesPanel, setShowSourcesPanel] = useState(true)
+
   return (
-    <div className="flex flex-col h-[calc(100vh-12rem)] mx-4">
-      {/* Header */}
-      <div className="glossy-panel px-6 py-4 mb-4">
+    <div className="flex gap-4 h-[calc(100vh-12rem)] mx-4">
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <div className="glossy-panel px-6 py-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-xl font-bold liquid-text">AI 논문 Q&A</h1>
@@ -202,25 +227,89 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="glossy-panel p-4">
-        <form onSubmit={handleSubmit} className="flex gap-4">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="질문을 입력하세요..."
-            className="glossy-input flex-1 px-4 py-3"
-            disabled={isLoading}
-          />
+        {/* Input */}
+        <div className="glossy-panel p-4">
+          <form onSubmit={handleSubmit} className="flex gap-4">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="질문을 입력하세요..."
+              className="glossy-input flex-1 px-4 py-3"
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className="glossy-btn-primary px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send size={20} />
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Right Sidebar - Referenced Papers */}
+      <div className="w-72 flex-shrink-0 hidden lg:block">
+        <div className="glossy-panel p-4 h-full flex flex-col">
+          {/* Header */}
           <button
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            className="glossy-btn-primary px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setShowSourcesPanel(!showSourcesPanel)}
+            className="w-full flex items-center justify-between mb-3 flex-shrink-0"
           >
-            <Send size={20} />
+            <div className="flex items-center gap-2">
+              <FileText className="text-purple-500" size={20} />
+              <h3 className="font-semibold text-slate-800">참고 논문</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-medium">
+                {allSources.length}
+              </span>
+              {showSourcesPanel ? (
+                <ChevronUp size={18} className="text-slate-400" />
+              ) : (
+                <ChevronDown size={18} className="text-slate-400" />
+              )}
+            </div>
           </button>
-        </form>
+
+          {/* Paper List */}
+          {showSourcesPanel && (
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+              {allSources.length > 0 ? (
+                allSources.map((source, index) => (
+                  <Link
+                    key={source.pmid}
+                    to={`/paper/${source.pmid}`}
+                    className="flex items-start gap-2 p-3 bg-white/50 rounded-lg border border-slate-200 hover:bg-purple-50 hover:border-purple-300 transition-all group"
+                  >
+                    <span className="flex-shrink-0 w-6 h-6 rounded bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xs font-bold flex items-center justify-center">
+                      {index + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-700 font-medium line-clamp-2 group-hover:text-purple-700">
+                        {source.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-slate-500">PMID: {source.pmid}</span>
+                        <span className="text-xs text-purple-500 font-medium">
+                          {(source.relevance * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                    <ExternalLink size={14} className="text-slate-400 group-hover:text-purple-500 flex-shrink-0 mt-1" />
+                  </Link>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  <BookOpen className="mx-auto mb-2 opacity-30" size={32} />
+                  <p className="text-sm">질문을 하시면</p>
+                  <p className="text-sm">참고 논문이 표시됩니다</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
