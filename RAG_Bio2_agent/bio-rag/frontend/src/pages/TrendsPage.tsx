@@ -118,13 +118,13 @@ export default function TrendsPage() {
           </div>
 
           {/* View Mode Tabs */}
-          <div className="flex items-center gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-white/60 border border-slate-200">
             <button
               onClick={() => setViewMode('trends')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 viewMode === 'trends'
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-400/30'
-                  : 'text-white/60 hover:text-white/80'
+                  ? 'bg-cyan-100 text-cyan-700 border border-cyan-300'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
               <TrendingUp size={18} />
@@ -134,8 +134,8 @@ export default function TrendsPage() {
               onClick={() => setViewMode('pipeline')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 viewMode === 'pipeline'
-                  ? 'bg-purple-500/20 text-purple-400 border border-purple-400/30'
-                  : 'text-white/60 hover:text-white/80'
+                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
               <Workflow size={18} />
@@ -145,8 +145,8 @@ export default function TrendsPage() {
               onClick={() => setViewMode('vector')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 viewMode === 'vector'
-                  ? 'bg-green-500/20 text-green-400 border border-green-400/30'
-                  : 'text-white/60 hover:text-white/80'
+                  ? 'bg-green-100 text-green-700 border border-green-300'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
               <Boxes size={18} />
@@ -173,7 +173,7 @@ export default function TrendsPage() {
           <form onSubmit={handleSearch} className="mb-8">
             <div className="flex gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50" size={20} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                 <input
                   type="text"
                   value={searchInput}
@@ -208,24 +208,24 @@ export default function TrendsPage() {
           {analysisLoading ? (
             <div className="glossy-panel p-8">
               <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="animate-spin text-cyan-400 mb-4" size={48} />
-                <p className="text-white/70 text-lg">AI가 "{queryFromUrl}" 연구 트렌드를 분석하고 있습니다...</p>
-                <p className="text-white/50 text-sm mt-2">잠시만 기다려 주세요</p>
+                <Loader2 className="animate-spin text-cyan-500 mb-4" size={48} />
+                <p className="text-slate-700 text-lg">AI가 "{queryFromUrl}" 연구 트렌드를 분석하고 있습니다...</p>
+                <p className="text-slate-500 text-sm mt-2">잠시만 기다려 주세요</p>
               </div>
             </div>
           ) : analysisError ? (
-            <div className="glossy-panel p-8 bg-red-500/10 border-red-400/30">
-              <p className="text-red-300 text-center">트렌드 분석 중 오류가 발생했습니다. 다시 시도해주세요.</p>
+            <div className="glossy-panel p-8 bg-red-100 border-red-300">
+              <p className="text-red-600 text-center">트렌드 분석 중 오류가 발생했습니다. 다시 시도해주세요.</p>
             </div>
           ) : trendAnalysis ? (
             <div className="space-y-6">
               {/* Summary Card */}
-              <div className="glossy-panel p-6 bg-gradient-to-r from-cyan-500/10 to-purple-500/10">
+              <div className="glossy-panel p-6 bg-gradient-to-r from-cyan-100/50 to-purple-100/50">
                 <div className="flex items-center gap-2 mb-4">
-                  <Sparkles className="text-yellow-400" size={24} />
-                  <h2 className="text-xl font-semibold text-white">AI 트렌드 요약</h2>
+                  <Sparkles className="text-yellow-500" size={24} />
+                  <h2 className="text-xl font-semibold text-slate-800">AI 트렌드 요약</h2>
                 </div>
-                <p className="text-white/90 leading-relaxed text-lg">{trendAnalysis.summary}</p>
+                <p className="text-slate-700 leading-relaxed text-lg">{trendAnalysis.summary}</p>
               </div>
 
               {/* Key Trends & Related Topics */}
@@ -233,14 +233,14 @@ export default function TrendsPage() {
                 {/* Key Trends */}
                 <div className="glossy-panel p-6">
                   <div className="flex items-center gap-2 mb-4">
-                    <TrendingUp className="text-green-400" size={24} />
-                    <h3 className="text-lg font-semibold text-white">주요 트렌드</h3>
+                    <TrendingUp className="text-green-500" size={24} />
+                    <h3 className="text-lg font-semibold text-slate-800">주요 트렌드</h3>
                   </div>
                   <div className="space-y-3">
                     {trendAnalysis.keyTrends.map((trend, i) => (
                       <div
                         key={i}
-                        className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/10"
+                        className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200"
                       >
                         <span
                           className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold text-white"
@@ -248,7 +248,7 @@ export default function TrendsPage() {
                         >
                           {i + 1}
                         </span>
-                        <span className="text-white/90">{trend}</span>
+                        <span className="text-slate-700">{trend}</span>
                       </div>
                     ))}
                   </div>
@@ -257,8 +257,8 @@ export default function TrendsPage() {
                 {/* Related Topics */}
                 <div className="glossy-panel p-6">
                   <div className="flex items-center gap-2 mb-4">
-                    <Target className="text-pink-400" size={24} />
-                    <h3 className="text-lg font-semibold text-white">관련 연구 분야</h3>
+                    <Target className="text-pink-500" size={24} />
+                    <h3 className="text-lg font-semibold text-slate-800">관련 연구 분야</h3>
                   </div>
                   <div className="flex flex-wrap gap-3">
                     {trendAnalysis.relatedTopics.map((topic, i) => (
@@ -268,21 +268,21 @@ export default function TrendsPage() {
                           setSearchInput(topic)
                           setSearchParams({ q: topic })
                         }}
-                        className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/90 rounded-full border border-white/20 transition-all flex items-center gap-2"
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full border border-slate-300 transition-all flex items-center gap-2"
                       >
                         {topic}
-                        <ArrowRight size={14} className="text-white/50" />
+                        <ArrowRight size={14} className="text-slate-400" />
                       </button>
                     ))}
                   </div>
 
                   {/* Research Direction */}
-                  <div className="mt-6 pt-4 border-t border-white/10">
+                  <div className="mt-6 pt-4 border-t border-slate-200">
                     <div className="flex items-center gap-2 mb-3">
-                      <Compass className="text-cyan-400" size={20} />
-                      <h4 className="font-medium text-white">향후 연구 방향</h4>
+                      <Compass className="text-cyan-500" size={20} />
+                      <h4 className="font-medium text-slate-800">향후 연구 방향</h4>
                     </div>
-                    <p className="text-white/80 leading-relaxed">{trendAnalysis.researchDirection}</p>
+                    <p className="text-slate-600 leading-relaxed">{trendAnalysis.researchDirection}</p>
                   </div>
                 </div>
               </div>
@@ -290,11 +290,11 @@ export default function TrendsPage() {
               {/* Detailed Analysis */}
               <div className="glossy-panel p-6">
                 <div className="flex items-center gap-2 mb-4">
-                  <Lightbulb className="text-yellow-400" size={24} />
-                  <h3 className="text-lg font-semibold text-white">상세 분석</h3>
+                  <Lightbulb className="text-yellow-500" size={24} />
+                  <h3 className="text-lg font-semibold text-slate-800">상세 분석</h3>
                 </div>
-                <div className="prose prose-invert max-w-none">
-                  <p className="text-white/85 leading-relaxed whitespace-pre-line">{trendAnalysis.analysis}</p>
+                <div className="prose max-w-none">
+                  <p className="text-slate-700 leading-relaxed whitespace-pre-line">{trendAnalysis.analysis}</p>
                 </div>
               </div>
 
@@ -321,13 +321,13 @@ export default function TrendsPage() {
             {/* Hot Topics List */}
             <div className="glossy-panel p-6">
               <div className="flex items-center gap-2 mb-6">
-                <Flame className="text-orange-400" size={24} />
-                <h2 className="text-xl font-semibold text-white">핫 토픽 TOP 10</h2>
+                <Flame className="text-orange-500" size={24} />
+                <h2 className="text-xl font-semibold text-slate-800">핫 토픽 TOP 10</h2>
               </div>
 
               {hotLoading ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="animate-spin text-white/50" size={32} />
+                  <Loader2 className="animate-spin text-slate-400" size={32} />
                 </div>
               ) : hotTopics && hotTopics.length > 0 ? (
                 <div className="space-y-3">
@@ -338,7 +338,7 @@ export default function TrendsPage() {
                         setSearchInput(topic.keyword)
                         setSearchParams({ q: topic.keyword })
                       }}
-                      className="flex items-center justify-between w-full p-3 bg-white/10 rounded-lg hover:bg-white/20 transition-colors border border-white/10"
+                      className="flex items-center justify-between w-full p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors border border-slate-200"
                     >
                       <div className="flex items-center gap-3">
                         <span
@@ -347,15 +347,15 @@ export default function TrendsPage() {
                         >
                           {index + 1}
                         </span>
-                        <span className="font-medium text-white">{topic.keyword}</span>
+                        <span className="font-medium text-slate-800">{topic.keyword}</span>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm font-semibold text-white">
+                        <div className="text-sm font-semibold text-slate-700">
                           {topic.count.toLocaleString()}
                         </div>
                         <div
                           className={`text-xs font-medium ${
-                            topic.growthRate > 0 ? 'text-green-400' : 'text-red-400'
+                            topic.growthRate > 0 ? 'text-green-600' : 'text-red-500'
                           }`}
                         >
                           {topic.growthRate > 0 ? '↑' : '↓'} {Math.round(topic.growthRate * 100)}%
@@ -365,30 +365,30 @@ export default function TrendsPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-center text-white/50 py-8">데이터 로딩 실패</p>
+                <p className="text-center text-slate-500 py-8">데이터 로딩 실패</p>
               )}
             </div>
 
             {/* Bar Chart */}
             <div className="glossy-panel p-6">
               <div className="flex items-center gap-2 mb-6">
-                <BarChart3 className="text-cyan-400" size={24} />
-                <h2 className="text-xl font-semibold text-white">논문 수 비교</h2>
+                <BarChart3 className="text-cyan-500" size={24} />
+                <h2 className="text-xl font-semibold text-slate-800">논문 수 비교</h2>
               </div>
 
               {hotLoading ? (
                 <div className="flex justify-center py-8 h-80">
-                  <Loader2 className="animate-spin text-white/50" size={32} />
+                  <Loader2 className="animate-spin text-slate-400" size={32} />
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart data={hotTopicsChartData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis type="number" stroke="rgba(255,255,255,0.5)" />
-                    <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fill: 'rgba(255,255,255,0.7)' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.2)" />
+                    <XAxis type="number" stroke="rgba(100,116,139,0.7)" />
+                    <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fill: 'rgba(51,65,85,0.9)' }} />
                     <Tooltip
                       formatter={(value: number) => [`${value.toLocaleString()} 논문`, '논문 수']}
-                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff' }}
+                      contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(100,116,139,0.3)', borderRadius: '8px', color: '#334155' }}
                     />
                     <Bar dataKey="count" fill="#06b6d4" radius={[0, 4, 4, 0]} />
                   </BarChart>
@@ -400,24 +400,24 @@ export default function TrendsPage() {
           {/* Middle Row - Line Chart */}
           <div className="glossy-panel p-6 mb-6">
             <div className="flex items-center gap-2 mb-6">
-              <TrendingUp className="text-green-400" size={24} />
-              <h2 className="text-xl font-semibold text-white">키워드 트렌드 (월별)</h2>
+              <TrendingUp className="text-green-500" size={24} />
+              <h2 className="text-xl font-semibold text-slate-800">키워드 트렌드 (월별)</h2>
             </div>
 
             {trendsLoading ? (
               <div className="flex justify-center py-8 h-80">
-                <Loader2 className="animate-spin text-white/50" size={32} />
+                <Loader2 className="animate-spin text-slate-400" size={32} />
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={350}>
                 <LineChart data={trendChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis dataKey="month" stroke="rgba(255,255,255,0.5)" />
-                  <YAxis stroke="rgba(255,255,255,0.5)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.2)" />
+                  <XAxis dataKey="month" stroke="rgba(100,116,139,0.7)" />
+                  <YAxis stroke="rgba(100,116,139,0.7)" />
                   <Tooltip
-                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff' }}
+                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(100,116,139,0.3)', borderRadius: '8px', color: '#334155' }}
                   />
-                  <Legend wrapperStyle={{ color: '#fff' }} />
+                  <Legend wrapperStyle={{ color: '#334155' }} />
                   <Line
                     type="monotone"
                     dataKey="CRISPR"
@@ -449,7 +449,7 @@ export default function TrendsPage() {
           <div className="grid lg:grid-cols-2 gap-6">
             {/* Pie Chart */}
             <div className="glossy-panel p-6">
-              <h2 className="text-xl font-semibold text-white mb-6">연구 분야 분포</h2>
+              <h2 className="text-xl font-semibold text-slate-800 mb-6">연구 분야 분포</h2>
 
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
@@ -470,7 +470,7 @@ export default function TrendsPage() {
                   </Pie>
                   <Tooltip
                     formatter={(value: number) => [`${value.toLocaleString()} 논문`, '논문 수']}
-                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff' }}
+                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(100,116,139,0.3)', borderRadius: '8px', color: '#334155' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -479,7 +479,7 @@ export default function TrendsPage() {
                 {pieData.map((entry, index) => (
                   <div key={index} className="flex items-center gap-1 text-sm">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-white/70">{entry.name}</span>
+                    <span className="text-slate-600">{entry.name}</span>
                   </div>
                 ))}
               </div>
@@ -488,8 +488,8 @@ export default function TrendsPage() {
             {/* Popular Keywords */}
             <div className="glossy-panel p-6">
               <div className="flex items-center gap-2 mb-6">
-                <Sparkles className="text-yellow-400" size={24} />
-                <h2 className="text-xl font-semibold text-white">인기 키워드</h2>
+                <Sparkles className="text-yellow-500" size={24} />
+                <h2 className="text-xl font-semibold text-slate-800">인기 키워드</h2>
               </div>
               <div className="flex flex-wrap gap-3">
                 {[
@@ -514,8 +514,8 @@ export default function TrendsPage() {
                     }}
                     className={`px-4 py-2 rounded-full cursor-pointer transition-all ${
                       hot
-                        ? 'bg-gradient-to-r from-orange-500/80 to-pink-500/80 text-white font-medium shadow-lg hover:shadow-xl border border-orange-400/30'
-                        : 'bg-white/10 hover:bg-white/20 text-white/80 border border-white/20'
+                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white font-medium shadow-lg hover:shadow-xl border border-orange-400/30'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
                     }`}
                   >
                     {hot && <span className="mr-1">🔥</span>}
@@ -526,20 +526,20 @@ export default function TrendsPage() {
 
               {/* Growth Stats */}
               <div className="mt-8 grid grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-green-500/20 rounded-xl border border-green-400/30">
-                  <div className="text-2xl font-bold text-green-400">+67%</div>
-                  <div className="text-sm text-green-300">Spatial Transcriptomics</div>
-                  <div className="text-xs text-green-400/70 mt-1">가장 빠른 성장</div>
+                <div className="text-center p-4 bg-green-100 rounded-xl border border-green-300">
+                  <div className="text-2xl font-bold text-green-600">+67%</div>
+                  <div className="text-sm text-green-700">Spatial Transcriptomics</div>
+                  <div className="text-xs text-green-600 mt-1">가장 빠른 성장</div>
                 </div>
-                <div className="text-center p-4 bg-cyan-500/20 rounded-xl border border-cyan-400/30">
-                  <div className="text-2xl font-bold text-cyan-400">1,847</div>
-                  <div className="text-sm text-cyan-300">CRISPR-Cas9</div>
-                  <div className="text-xs text-cyan-400/70 mt-1">최다 논문</div>
+                <div className="text-center p-4 bg-cyan-100 rounded-xl border border-cyan-300">
+                  <div className="text-2xl font-bold text-cyan-600">1,847</div>
+                  <div className="text-sm text-cyan-700">CRISPR-Cas9</div>
+                  <div className="text-xs text-cyan-600 mt-1">최다 논문</div>
                 </div>
-                <div className="text-center p-4 bg-purple-500/20 rounded-xl border border-purple-400/30">
-                  <div className="text-2xl font-bold text-purple-400">+52%</div>
-                  <div className="text-sm text-purple-300">AlphaFold</div>
-                  <div className="text-xs text-purple-400/70 mt-1">AI 트렌드</div>
+                <div className="text-center p-4 bg-purple-100 rounded-xl border border-purple-300">
+                  <div className="text-2xl font-bold text-purple-600">+52%</div>
+                  <div className="text-sm text-purple-700">AlphaFold</div>
+                  <div className="text-xs text-purple-600 mt-1">AI 트렌드</div>
                 </div>
               </div>
             </div>
