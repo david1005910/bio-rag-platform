@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Library, Tag, Trash2, ExternalLink, MessageSquare, Loader2, BookOpen, Search, Database, FolderOpen, FileDown, FileX, ChevronRight, ChevronDown, Code, FileText } from 'lucide-react'
+import { Library, Tag, Trash2, ExternalLink, MessageSquare, Loader2, BookOpen, Search as SearchIcon, Database, FolderOpen, FileDown, FileX, ChevronRight, ChevronDown, Code, FileText } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { libraryApi, vectordbApi, searchApi } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
@@ -69,22 +69,33 @@ export default function LibraryPage() {
           <h1 className="text-3xl font-bold liquid-text">내 라이브러리</h1>
           <p className="liquid-text-muted mt-1">인덱싱된 논문 및 저장된 Meta 데이터를 관리하세요</p>
         </div>
-        <div className="flex items-center gap-2 bg-white/60 px-4 py-2 rounded-xl border border-slate-200">
-          {activeTab === 'vectordb' ? (
-            <>
-              <Database className="text-purple-500" size={24} />
-              <span className="text-slate-700 font-medium">
-                {vectordbPapers?.total || 0}개의 인덱싱 논문
-              </span>
-            </>
-          ) : (
-            <>
-              <BookOpen className="text-purple-500" size={24} />
-              <span className="text-slate-700 font-medium">
-                {papersData?.length || 0}개의 Meta 데이터
-              </span>
-            </>
-          )}
+        <div className="flex items-center gap-3">
+          {/* 논문 검색 버튼 */}
+          <Link
+            to="/search"
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all hover:scale-105"
+          >
+            <SearchIcon size={20} />
+            논문 검색
+          </Link>
+          {/* 통계 표시 */}
+          <div className="flex items-center gap-2 bg-white/60 px-4 py-2 rounded-xl border border-slate-200">
+            {activeTab === 'vectordb' ? (
+              <>
+                <Database className="text-purple-500" size={24} />
+                <span className="text-slate-700 font-medium">
+                  {vectordbPapers?.total || 0}개의 인덱싱 논문
+                </span>
+              </>
+            ) : (
+              <>
+                <BookOpen className="text-purple-500" size={24} />
+                <span className="text-slate-700 font-medium">
+                  {papersData?.length || 0}개의 Meta 데이터
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -157,7 +168,7 @@ export default function LibraryPage() {
                 to="/search"
                 className="glossy-btn-primary inline-flex items-center gap-2 px-6 py-3"
               >
-                <Search size={18} />
+                <SearchIcon size={18} />
                 논문 검색하기
               </Link>
             </div>
@@ -257,7 +268,7 @@ export default function LibraryPage() {
                   to="/search"
                   className="glossy-btn-primary inline-flex items-center gap-2 px-6 py-3"
                 >
-                  <Search size={18} />
+                  <SearchIcon size={18} />
                   논문 검색하기
                 </Link>
               </div>

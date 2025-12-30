@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Filter, ExternalLink, MessageSquare, Bookmark, BookmarkCheck, Languages, Loader2, Database, CheckCircle, X, Calendar, BookOpen, Users, TrendingUp, ChevronLeft, ChevronRight, FileDown, FileX, Globe, Beaker, GraduationCap } from 'lucide-react'
+import { Search, Filter, ExternalLink, MessageSquare, Bookmark, BookmarkCheck, Languages, Loader2, Database, CheckCircle, X, Calendar, BookOpen, Users, TrendingUp, ChevronLeft, ChevronRight, FileDown, FileX, Globe, Beaker, GraduationCap, Library, ChevronDown, ChevronUp } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { searchApi, libraryApi, vectordbApi } from '@/services/api'
 import { searchArxiv, searchCrossRef, type ExternalPaper, type ExternalSearchResponse } from '@/services/externalApis'
@@ -397,8 +397,16 @@ export default function SearchPage() {
     }
   }
 
+  // VectorDB indexed papers query
+  const { data: vectordbPapers } = useQuery({
+    queryKey: ['vectordbPapers'],
+    queryFn: () => vectordbApi.getPapers(),
+  })
+
+  const [showVectordbPanel, setShowVectordbPanel] = useState(true)
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold liquid-text mb-2">논문 검색</h1>
@@ -445,21 +453,25 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Results */}
-      {(isLoading || isTranslating) && (
-        <div className="flex justify-center py-12">
-          <div className="flex items-center gap-3 text-white/70">
-            <Loader2 className="animate-spin" size={24} />
-            <span>{isTranslating ? 'AI 번역 중...' : 'PubMed에서 검색 중...'}</span>
-          </div>
-        </div>
-      )}
+      {/* Main Content Grid */}
+      <div className="flex gap-6">
+        {/* Left: Search Results */}
+        <div className="flex-1 min-w-0">
+          {/* Results */}
+          {(isLoading || isTranslating) && (
+            <div className="flex justify-center py-12">
+              <div className="flex items-center gap-3 text-white/70">
+                <Loader2 className="animate-spin" size={24} />
+                <span>{isTranslating ? 'AI 번역 중...' : 'PubMed에서 검색 중...'}</span>
+              </div>
+            </div>
+          )}
 
-      {error && (
-        <div className="glossy-panel-sm bg-red-500/20 text-white p-4">
-          검색 중 오류가 발생했습니다. 다시 시도해주세요.
-        </div>
-      )}
+          {error && (
+            <div className="glossy-panel-sm bg-red-500/20 text-white p-4">
+              검색 중 오류가 발생했습니다. 다시 시도해주세요.
+            </div>
+          )}
 
       {data && (
         <div>
@@ -809,10 +821,88 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* External Sources Section */}
-      {searchTerm && (
-        <ExternalSourcesSection query={isKoreanSearch ? translatedQuery : searchTerm} />
-      )}
+          {/* External Sources Section */}
+          {searchTerm && (
+            <ExternalSourcesSection query={isKoreanSearch ? translatedQuery : searchTerm} />
+          )}
+        </div>
+
+        {/* Right: VectorDB Indexed Papers Sidebar */}
+        <div className="w-80 flex-shrink-0 hidden lg:block">
+          <div className="glossy-panel p-4 sticky top-24">
+            {/* Header */}
+            <button
+              onClick={() => setShowVectordbPanel(!showVectordbPanel)}
+              className="w-full flex items-center justify-between mb-3"
+            >
+              <div className="flex items-center gap-2">
+                <Database className="text-purple-500" size={20} />
+                <h3 className="font-semibold text-slate-800">VectorDB 인덱싱 논문</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-medium">
+                  {vectordbPapers?.total || 0}
+                </span>
+                {showVectordbPanel ? (
+                  <ChevronUp size={18} className="text-slate-400" />
+                ) : (
+                  <ChevronDown size={18} className="text-slate-400" />
+                )}
+              </div>
+            </button>
+
+            {/* Paper List */}
+            {showVectordbPanel && (
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {vectordbPapers && vectordbPapers.papers.length > 0 ? (
+                  vectordbPapers.papers.slice(0, 20).map((paper, index) => (
+                    <Link
+                      key={paper.id}
+                      to={`/paper/${paper.pmid}`}
+                      className="flex items-start gap-2 p-2 bg-white/50 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors group"
+                    >
+                      <span className="flex-shrink-0 w-6 h-6 rounded bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xs font-bold flex items-center justify-center">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-700 font-medium line-clamp-2 group-hover:text-purple-700">
+                          {paper.title}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">PMID: {paper.pmid}</p>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-slate-500">
+                    <Database className="mx-auto mb-2 opacity-30" size={32} />
+                    <p className="text-sm">인덱싱된 논문이 없습니다</p>
+                  </div>
+                )}
+
+                {/* View All Link */}
+                {vectordbPapers && vectordbPapers.papers.length > 20 && (
+                  <Link
+                    to="/library"
+                    className="flex items-center justify-center gap-2 p-2 text-sm text-purple-600 hover:text-purple-700 font-medium"
+                  >
+                    <Library size={16} />
+                    전체 {vectordbPapers.total}개 보기
+                  </Link>
+                )}
+              </div>
+            )}
+
+            {/* Library Link */}
+            <Link
+              to="/library"
+              className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-slate-200 text-sm text-purple-600 hover:text-purple-700 font-medium"
+            >
+              <Library size={16} />
+              내 라이브러리에서 관리
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
