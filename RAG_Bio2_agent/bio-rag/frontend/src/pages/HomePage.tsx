@@ -40,18 +40,18 @@ export default function HomePage() {
             </p>
             <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                to="/search"
-                className="glossy-btn-primary inline-flex items-center justify-center px-8 py-4 font-medium"
-              >
-                <Search className="mr-2" size={20} />
-                논문 검색 시작
-              </Link>
-              <Link
                 to="/chat"
-                className="glossy-btn inline-flex items-center justify-center px-8 py-4 font-medium"
+                className="glossy-btn-primary inline-flex items-center justify-center px-8 py-4 font-medium"
               >
                 <MessageSquare className="mr-2" size={20} />
                 AI에게 질문하기
+              </Link>
+              <Link
+                to="/search"
+                className="glossy-btn inline-flex items-center justify-center px-8 py-4 font-medium"
+              >
+                <Search className="mr-2" size={20} />
+                논문 검색 시작
               </Link>
             </div>
           </div>
