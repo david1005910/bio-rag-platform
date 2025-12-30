@@ -829,11 +829,11 @@ export default function SearchPage() {
 
         {/* Right: VectorDB Indexed Papers Sidebar */}
         <div className="w-80 flex-shrink-0 hidden lg:block">
-          <div className="glossy-panel p-4 sticky top-24">
+          <div className="glossy-panel p-4 sticky top-24 max-h-[calc(100vh-8rem)] flex flex-col">
             {/* Header */}
             <button
               onClick={() => setShowVectordbPanel(!showVectordbPanel)}
-              className="w-full flex items-center justify-between mb-3"
+              className="w-full flex items-center justify-between mb-3 flex-shrink-0"
             >
               <div className="flex items-center gap-2">
                 <Database className="text-purple-500" size={20} />
@@ -853,7 +853,7 @@ export default function SearchPage() {
 
             {/* Paper List */}
             {showVectordbPanel && (
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              <div className="space-y-2 flex-1 overflow-y-auto min-h-0">
                 {vectordbPapers && vectordbPapers.papers.length > 0 ? (
                   vectordbPapers.papers.slice(0, 20).map((paper, index) => (
                     <Link
@@ -895,7 +895,7 @@ export default function SearchPage() {
             {/* Library Link */}
             <Link
               to="/library"
-              className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-slate-200 text-sm text-purple-600 hover:text-purple-700 font-medium"
+              className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-slate-200 text-sm text-purple-600 hover:text-purple-700 font-medium flex-shrink-0"
             >
               <Library size={16} />
               내 라이브러리에서 관리
