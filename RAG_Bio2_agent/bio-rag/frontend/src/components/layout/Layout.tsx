@@ -5,8 +5,8 @@ import { useAuthStore } from '@/store/authStore'
 // DNAHelix removed for cleaner UI
 
 const navItems = [
-  { path: '/search', label: '논문 검색', icon: Search },
   { path: '/chat', label: 'AI 챗봇', icon: MessageSquare },
+  { path: '/search', label: '논문 검색', icon: Search },
   { path: '/library', label: '내 라이브러리', icon: Library },
   { path: '/trends', label: '트렌드', icon: TrendingUp },
 ]

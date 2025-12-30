@@ -1371,6 +1371,29 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const LEVEL_COLORS = ['#fbbf24', '#22c55e', '#06b6d4', '#a855f7', '#ec4899', '#f97316', '#6366f1'] // Center, L1, L2, L3, L4, L5, L6
 
+// Similarity-based colors for API mode
+const SIMILARITY_COLORS = {
+  center: '#fbbf24',     // 검색어 - yellow/gold
+  high: '#22c55e',       // 고유사 (>80%) - green
+  medium: '#06b6d4',     // 중유사 (60-80%) - cyan
+  low: '#a855f7',        // 저유사 (<60%) - purple
+}
+
+// Get color based on similarity score
+function getSimilarityColor(similarity: number, isCenter: boolean = false): string {
+  if (isCenter) return SIMILARITY_COLORS.center
+  if (similarity >= 0.8) return SIMILARITY_COLORS.high
+  if (similarity >= 0.6) return SIMILARITY_COLORS.medium
+  return SIMILARITY_COLORS.low
+}
+
+// Get similarity label
+function getSimilarityLabel(similarity: number): string {
+  if (similarity >= 0.8) return '고유사'
+  if (similarity >= 0.6) return '중유사'
+  return '저유사'
+}
+
 interface WordNode {
   id: string
   text: string
@@ -1397,6 +1420,7 @@ function flattenRelations(
 ): { nodes: WordNode[]; connections: Connection[] } {
   const nodes: WordNode[] = []
   const connections: Connection[] = []
+  const useSimilarityColors = data.isFromApi === true
 
   // Center node
   const centerNode: WordNode = {
@@ -1408,9 +1432,9 @@ function flattenRelations(
       (Math.random() - 0.5) * 10
     ),
     targetPosition: new THREE.Vector3(0, 0, 0),
-    color: LEVEL_COLORS[0],
+    color: getSimilarityColor(1, true),
     similarity: 1,
-    category: 'center',
+    category: '검색어',
     level: 0,
   }
   nodes.push(centerNode)
@@ -1438,7 +1462,15 @@ function flattenRelations(
       const targetZ = Math.sin(angle) * distance
 
       const nodeId = `${rel.word}-${level}`
-      const color = CATEGORY_COLORS[rel.category] || LEVEL_COLORS[Math.min(level, 6)]
+      // Use similarity-based colors for API mode, category colors otherwise
+      const color = useSimilarityColors
+        ? getSimilarityColor(rel.similarity)
+        : (CATEGORY_COLORS[rel.category] || LEVEL_COLORS[Math.min(level, 6)])
+
+      // Update category to similarity label for API mode
+      const category = useSimilarityColors
+        ? getSimilarityLabel(rel.similarity)
+        : rel.category
 
       nodes.push({
         id: nodeId,
@@ -1451,7 +1483,7 @@ function flattenRelations(
         targetPosition: new THREE.Vector3(targetX, targetY, targetZ),
         color,
         similarity: rel.similarity,
-        category: rel.category,
+        category,
         level,
         parentId,
       })
@@ -2485,7 +2517,7 @@ export default function VectorSpaceAnimation() {
         {/* Legend */}
         <div className="absolute bottom-4 right-4 p-2 rounded-lg bg-black/70 backdrop-blur-sm border border-white/10">
           <div className="text-xs text-white/50 mb-1 flex items-center gap-1">
-            <Info size={12} /> 노드 유형
+            <Info size={12} /> 유사도 기반 노드
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
             {currentData.isFromApi ? (
@@ -2496,15 +2528,15 @@ export default function VectorSpaceAnimation() {
                 </div>
                 <div className="flex items-center gap-1 text-[9px]">
                   <div className="w-2 h-2 rounded-full bg-green-400" />
-                  <span className="text-white/70">논문</span>
+                  <span className="text-white/70">고유사 (≥80%)</span>
                 </div>
                 <div className="flex items-center gap-1 text-[9px]">
                   <div className="w-2 h-2 rounded-full bg-cyan-400" />
-                  <span className="text-white/70">키워드</span>
+                  <span className="text-white/70">중유사 (60-80%)</span>
                 </div>
                 <div className="flex items-center gap-1 text-[9px]">
                   <div className="w-2 h-2 rounded-full bg-purple-400" />
-                  <span className="text-white/70">관련주제</span>
+                  <span className="text-white/70">저유사 (&lt;60%)</span>
                 </div>
               </>
             ) : (
@@ -2542,7 +2574,7 @@ export default function VectorSpaceAnimation() {
         </div>
         <p className="text-xs text-white/60">
           {currentData.isFromApi
-            ? '논문 검색 결과를 기반으로 벡터 스페이스를 시각화합니다. 검색어 → 논문 → 키워드 → 관련 주제 순으로 연결됩니다.'
+            ? '검색어와 유사도를 기반으로 벡터 스페이스를 시각화합니다. 녹색(고유사 ≥80%) → 청록색(중유사 60-80%) → 보라색(저유사 <60%) 순으로 유사도를 나타냅니다.'
             : '중심 단어에서 시작하여 6단계까지의 의미적 연관 관계를 시각화합니다. 가까울수록 유사도가 높으며, 단계가 깊어질수록 간접적인 연관 관계를 나타냅니다.'
           }
         </p>
