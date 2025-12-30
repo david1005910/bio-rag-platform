@@ -26,14 +26,32 @@ export default function Layout() {
         </filter>
       </svg>
 
-      {/* Animated Blobs Background */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
-        <div className="blob blob-pink w-96 h-96 top-10 left-10 animate-blob opacity-70" />
-        <div className="blob blob-purple w-80 h-80 top-40 right-20 animate-blob-delay-2 opacity-60" />
-        <div className="blob blob-blue w-72 h-72 bottom-20 left-1/4 animate-blob-delay-4 opacity-50" />
-        <div className="blob blob-orange w-64 h-64 bottom-40 right-1/3 animate-blob opacity-40" />
-        <div className="blob blob-cyan w-56 h-56 top-1/2 left-1/2 animate-blob-delay-2 opacity-50" />
+      {/* Spline 3D DNA Background */}
+      <div className="fixed inset-0 -z-20 overflow-hidden">
+        <iframe
+          src="https://my.spline.design/dnaparticles-zmvjvOLq5IukMI1j9JLf0gJg/"
+          frameBorder="0"
+          width="100%"
+          height="100%"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none'
+          }}
+          title="DNA Particles Background"
+        />
+      </div>
 
+      {/* Animated Blobs Background (overlay) */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="blob blob-pink w-96 h-96 top-10 left-10 animate-blob opacity-40" />
+        <div className="blob blob-purple w-80 h-80 top-40 right-20 animate-blob-delay-2 opacity-30" />
+        <div className="blob blob-blue w-72 h-72 bottom-20 left-1/4 animate-blob-delay-4 opacity-25" />
+        <div className="blob blob-orange w-64 h-64 bottom-40 right-1/3 animate-blob opacity-20" />
+        <div className="blob blob-cyan w-56 h-56 top-1/2 left-1/2 animate-blob-delay-2 opacity-25" />
       </div>
 
       {/* Header */}
