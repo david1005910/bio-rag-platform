@@ -43,6 +43,8 @@ export default function Layout() {
           }}
           title="DNA Particles Background"
         />
+        {/* Cover Spline watermark */}
+        <div className="absolute bottom-0 right-0 w-80 h-24 bg-gradient-to-tl from-[#fef3e2] via-[#fef3e2] to-transparent" />
       </div>
 
       {/* Animated Blobs Background (overlay) */}
