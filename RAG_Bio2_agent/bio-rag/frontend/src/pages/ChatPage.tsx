@@ -132,15 +132,15 @@ export default function ChatPage() {
               onChange={(e) => setUseVectordb(e.target.checked)}
               className="w-4 h-4 rounded accent-cyan-500"
             />
-            <Database size={16} className={useVectordb ? 'text-cyan-400' : 'text-white/40'} />
-            <span className={`text-sm ${useVectordb ? 'text-cyan-300' : 'text-white/50'}`}>
+            <Database size={16} className={useVectordb ? 'text-purple-500' : 'text-slate-400'} />
+            <span className={`text-sm font-medium ${useVectordb ? 'text-purple-600' : 'text-slate-500'}`}>
               VectorDB 검색
             </span>
           </label>
 
           {useVectordb && (
             <div className="flex items-center gap-2">
-              <Search size={14} className="text-white/50" />
+              <Search size={14} className="text-slate-400" />
               <select
                 value={searchMode}
                 onChange={(e) => setSearchMode(e.target.value as 'hybrid' | 'dense' | 'sparse')}
@@ -159,7 +159,7 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 glossy-panel-sm mb-4">
         {messages.length === 0 && (
           <div className="text-center py-16">
-            <BookOpen className="mx-auto text-white/30 mb-4" size={64} />
+            <BookOpen className="mx-auto text-purple-300 mb-4" size={64} />
             <h3 className="text-xl font-medium liquid-text mb-2">
               무엇이든 물어보세요
             </h3>
@@ -244,12 +244,12 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
     // Process markdown-like formatting for AI responses
     const lines = content.split('\n')
     return (
-      <div className="space-y-3 text-white/90">
+      <div className="space-y-3 text-slate-700">
         {lines.map((line, idx) => {
           // Bold text: **text**
           const processedLine = line.replace(
             /\*\*(.+?)\*\*/g,
-            '<strong class="text-white font-semibold">$1</strong>'
+            '<strong class="text-slate-900 font-semibold">$1</strong>'
           )
 
           // Sanitize HTML to prevent XSS
@@ -260,7 +260,7 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
             return (
               <div
                 key={idx}
-                className="pl-4 border-l-2 border-cyan-400/50"
+                className="pl-4 border-l-2 border-purple-400"
                 dangerouslySetInnerHTML={{ __html: sanitizedLine }}
               />
             )
@@ -299,8 +299,8 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
         {/* VectorDB indicator */}
         {!isUser && message.vectordbUsed && (
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <Database size={12} className="text-cyan-400" />
-            <span className="text-cyan-300">
+            <Database size={12} className="text-purple-500" />
+            <span className="text-purple-600 font-medium">
               VectorDB 검색 사용 ({message.searchMode === 'hybrid' ? 'Hybrid' : message.searchMode === 'dense' ? 'Dense' : 'Sparse'})
             </span>
           </div>
@@ -308,33 +308,33 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
 
         {/* Sources section */}
         {message.sources && message.sources.length > 0 && (
-          <details className="mt-4 pt-4 border-t border-white/20">
-            <summary className="text-sm font-medium text-cyan-300 cursor-pointer hover:text-cyan-200 transition-colors">
+          <details className="mt-4 pt-4 border-t border-slate-200">
+            <summary className="text-sm font-medium text-purple-600 cursor-pointer hover:text-purple-700 transition-colors">
               📚 참고 문헌 ({message.sources.length}개)
-              {message.vectordbUsed && <span className="ml-2 text-xs text-cyan-400/70">[VectorDB]</span>}
+              {message.vectordbUsed && <span className="ml-2 text-xs text-purple-400">[VectorDB]</span>}
             </summary>
             <div className="space-y-2 mt-3">
               {message.sources.map((source, index: number) => (
                 <div
                   key={source.pmid}
-                  className="text-sm bg-white/10 p-3 rounded-xl border border-white/10"
+                  className="text-sm bg-slate-50 p-3 rounded-xl border border-slate-200"
                 >
-                  <div className="font-medium text-white flex items-center gap-2">
+                  <div className="font-medium text-slate-800 flex items-center gap-2">
                     [{index + 1}] PMID: {source.pmid}
                     {source.sourceType === 'vectordb' && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded font-medium">
                         VectorDB
                       </span>
                     )}
                   </div>
-                  <div className="text-white/70 text-xs mt-1">{source.title}</div>
-                  <div className="text-xs text-white/50 mt-1 flex flex-wrap gap-3">
-                    <span className="text-cyan-300">Hybrid: {source.relevance.toFixed(2)} <span className="text-white/40">(가중 평균)</span></span>
+                  <div className="text-slate-600 text-xs mt-1">{source.title}</div>
+                  <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-3">
+                    <span className="text-purple-600 font-medium">Hybrid: {source.relevance.toFixed(2)} <span className="text-slate-400">(가중 평균)</span></span>
                     {source.denseScore !== undefined && source.denseScore !== null && (
-                      <span className="text-blue-300">Dense: {source.denseScore.toFixed(2)} <span className="text-white/40">(의미적 유사도)</span></span>
+                      <span className="text-blue-600 font-medium">Dense: {source.denseScore.toFixed(2)} <span className="text-slate-400">(의미적 유사도)</span></span>
                     )}
                     {source.sparseScore !== undefined && source.sparseScore !== null && (
-                      <span className="text-green-300">Sparse: {source.sparseScore.toFixed(2)} <span className="text-white/40">(키워드 매칭)</span></span>
+                      <span className="text-green-600 font-medium">Sparse: {source.sparseScore.toFixed(2)} <span className="text-slate-400">(키워드 매칭)</span></span>
                     )}
                   </div>
                 </div>
