@@ -26,7 +26,7 @@ export default function Layout() {
         </filter>
       </svg>
 
-      {/* Spline 3D DNA Background */}
+      {/* Spline 3D DNA Background - positioned left */}
       <div className="fixed inset-0 -z-20 overflow-hidden">
         <iframe
           src="https://my.spline.design/dnaparticles-zmvjvOLq5IukMI1j9JLf0gJg/"
@@ -36,8 +36,8 @@ export default function Layout() {
           style={{
             position: 'absolute',
             top: 0,
-            left: 0,
-            width: '100%',
+            left: '-30%',
+            width: '130%',
             height: '100%',
             pointerEvents: 'none'
           }}
