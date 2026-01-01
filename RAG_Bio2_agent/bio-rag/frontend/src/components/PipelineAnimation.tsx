@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Play, Pause, RotateCcw, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Play, Pause, RotateCcw, ChevronRight, Volume2, VolumeX } from 'lucide-react'
 
 interface PipelineStep {
   id: number
@@ -9,6 +9,7 @@ interface PipelineStep {
   color: string
   icon: string
   details: string[]
+  narration: string  // 음성 설명 텍스트
 }
 
 const PIPELINE_STEPS: PipelineStep[] = [
@@ -24,6 +25,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
       '논문 제목, 초록, 저자 추출',
       'Rate Limit: 10 req/sec',
     ],
+    narration: '첫 번째 단계, 데이터 수집입니다. PubMed API를 호출하여 바이오메디컬 논문의 제목, 초록, 저자 정보를 수집합니다.',
   },
   {
     id: 2,
@@ -33,6 +35,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#10B981',
     icon: '🔧',
     details: ['특수문자 제거', '참조번호 정규화', '512 토큰 단위 청킹'],
+    narration: '두 번째 단계, 텍스트 전처리입니다. 수집된 텍스트에서 특수문자를 제거하고, 512 토큰 단위로 청킹합니다.',
   },
   {
     id: 3,
@@ -42,6 +45,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#8B5CF6',
     icon: '🧮',
     details: ['text-embedding-3-small 모델', '1536 차원 벡터', '배치 처리 (100개씩)'],
+    narration: '세 번째 단계, 임베딩 생성입니다. OpenAI의 임베딩 모델을 사용하여 텍스트를 1536차원 벡터로 변환합니다.',
   },
   {
     id: 4,
@@ -51,6 +55,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#F59E0B',
     icon: '💾',
     details: ['Qdrant Vector DB', 'HNSW 인덱스', '메타데이터 저장'],
+    narration: '네 번째 단계, 벡터 저장입니다. 생성된 벡터를 Qdrant 벡터 데이터베이스에 HNSW 인덱스로 저장합니다.',
   },
   {
     id: 5,
@@ -60,6 +65,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#EC4899',
     icon: '❓',
     details: ['한글 → 영어 번역', '쿼리 임베딩 생성', '검색 파라미터 설정'],
+    narration: '다섯 번째 단계, 쿼리 처리입니다. 사용자의 질문을 영어로 번역하고, 검색을 위한 임베딩을 생성합니다.',
   },
   {
     id: 6,
@@ -69,6 +75,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#DB2777',
     icon: '🧠',
     details: ['FTS5 전문 검색', 'BM25 유사도 랭킹', '과거 대화 컨텍스트 추출'],
+    narration: '여섯 번째 단계, 메모리 검색입니다. SQLite 데이터베이스에서 유사한 과거 질문과 답변을 검색합니다.',
   },
   {
     id: 7,
@@ -78,6 +85,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#06B6D4',
     icon: '🔍',
     details: ['Dense: 의미 유사도 (70%)', 'Sparse: 키워드 매칭 (30%)', 'Score Fusion'],
+    narration: '일곱 번째 단계, 하이브리드 검색입니다. 의미 기반 Dense 검색과 키워드 기반 Sparse 검색을 70대 30 비율로 융합합니다.',
   },
   {
     id: 8,
@@ -87,6 +95,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#F97316',
     icon: '🎯',
     details: ['Cross-Encoder 모델', '쿼리-문서 관련성 재평가', 'Top-K 재정렬'],
+    narration: '여덟 번째 단계, 리랭킹입니다. Cross-Encoder 모델로 검색 결과의 관련성을 재평가하여 순위를 조정합니다.',
   },
   {
     id: 9,
@@ -96,6 +105,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#EF4444',
     icon: '📋',
     details: ['Top-K 문서 선택', '메모리 컨텍스트 병합', '프롬프트 템플릿 적용'],
+    narration: '아홉 번째 단계, 컨텍스트 구성입니다. 검색된 논문과 메모리 정보를 결합하여 AI 프롬프트를 구성합니다.',
   },
   {
     id: 10,
@@ -105,6 +115,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#22C55E',
     icon: '🤖',
     details: ['GPT-4 API 호출', '컨텍스트 기반 응답', '출처 인용 포함'],
+    narration: '열 번째 단계, LLM 응답 생성입니다. GPT-4 모델이 구성된 컨텍스트를 바탕으로 답변을 생성합니다.',
   },
   {
     id: 11,
@@ -114,6 +125,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     color: '#7C3AED',
     icon: '💿',
     details: ['질문-답변 쌍 저장', '쿼리 해시 인덱싱', 'FTS 트리거 업데이트'],
+    narration: '마지막 단계, 메모리 저장입니다. 질문과 답변을 SQLite 데이터베이스에 저장하여 다음 질문에 참조합니다.',
   },
 ]
 
@@ -121,11 +133,77 @@ export default function PipelineAnimation() {
   const [currentStep, setCurrentStep] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
+  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null)
 
+  // 음성 합성 함수
+  const speak = useCallback((text: string) => {
+    if (!voiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) {
+      return
+    }
+
+    // 이전 음성 중지
+    window.speechSynthesis.cancel()
+
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'ko-KR'
+    utterance.rate = 1.0
+    utterance.pitch = 1.0
+    utterance.volume = 1.0
+
+    // 한국어 음성 찾기
+    const voices = window.speechSynthesis.getVoices()
+    const koreanVoice = voices.find(voice => voice.lang.includes('ko'))
+    if (koreanVoice) {
+      utterance.voice = koreanVoice
+    }
+
+    utterance.onstart = () => setIsSpeaking(true)
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+
+    speechSynthRef.current = utterance
+    window.speechSynthesis.speak(utterance)
+  }, [voiceEnabled])
+
+  // 음성 중지 함수
+  const stopSpeaking = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+    }
+  }, [])
+
+  // 단계 변경 시 음성 재생
+  useEffect(() => {
+    if (voiceEnabled && isPlaying) {
+      speak(PIPELINE_STEPS[currentStep].narration)
+    }
+  }, [currentStep, voiceEnabled, isPlaying, speak])
+
+  // 음성 기능 토글 시 현재 단계 설명
+  useEffect(() => {
+    if (voiceEnabled && !isPlaying) {
+      speak(PIPELINE_STEPS[currentStep].narration)
+    } else if (!voiceEnabled) {
+      stopSpeaking()
+    }
+  }, [voiceEnabled])
+
+  // 컴포넌트 언마운트 시 음성 중지
+  useEffect(() => {
+    return () => {
+      stopSpeaking()
+    }
+  }, [stopSpeaking])
+
+  // 애니메이션 간격 조정 (음성 활성화 시 더 긴 간격)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
 
     if (isPlaying) {
+      const intervalTime = voiceEnabled ? 5000 : 2000  // 음성 시 5초, 아니면 2초
       interval = setInterval(() => {
         setCurrentStep((prev) => {
           if (prev >= PIPELINE_STEPS.length - 1) {
@@ -134,22 +212,33 @@ export default function PipelineAnimation() {
           }
           return prev + 1
         })
-      }, 2000)
+      }, intervalTime)
     }
 
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [isPlaying])
+  }, [isPlaying, voiceEnabled])
 
   const handleReset = () => {
     setCurrentStep(0)
     setIsPlaying(false)
+    stopSpeaking()
   }
 
   const handleStepClick = (index: number) => {
     setCurrentStep(index)
     setIsPlaying(false)
+    if (voiceEnabled) {
+      speak(PIPELINE_STEPS[index].narration)
+    }
+  }
+
+  const toggleVoice = () => {
+    if (voiceEnabled) {
+      stopSpeaking()
+    }
+    setVoiceEnabled(!voiceEnabled)
   }
 
   return (
@@ -191,6 +280,18 @@ export default function PipelineAnimation() {
             }`}
           >
             상세 {showDetails ? 'ON' : 'OFF'}
+          </button>
+          <button
+            onClick={toggleVoice}
+            className={`p-2 rounded-lg transition-all flex items-center gap-2 ${
+              voiceEnabled
+                ? 'bg-pink-500/20 text-pink-400 border border-pink-400/30'
+                : 'bg-white/10 text-white/70 border border-white/20'
+            } ${isSpeaking ? 'animate-pulse' : ''}`}
+            title={voiceEnabled ? '음성 설명 끄기' : '음성 설명 켜기'}
+          >
+            {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            <span className="text-sm hidden sm:inline">음성</span>
           </button>
         </div>
       </div>
