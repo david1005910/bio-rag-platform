@@ -47,3 +47,4 @@ structlog>=24.1.0
 
 # XML Parsing
 lxml>=5.1.0
+neo4j>=5.0.0

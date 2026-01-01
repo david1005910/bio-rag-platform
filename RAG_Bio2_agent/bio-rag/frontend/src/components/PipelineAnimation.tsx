@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Play, Pause, RotateCcw, ChevronRight, Volume2, VolumeX } from 'lucide-react'
+import { speakText, stopSpeech, loadVoices } from '@/utils/speech'
 
 interface PipelineStep {
   id: number
@@ -89,36 +90,46 @@ const PIPELINE_STEPS: PipelineStep[] = [
   },
   {
     id: 8,
+    name: 'Graph Search',
+    nameKo: 'GraphDB 검색',
+    description: 'Neo4j 그래프 관계 기반 검색',
+    color: '#A855F7',
+    icon: '🕸️',
+    details: ['Neo4j 인용 네트워크 탐색', '저자/키워드 관계 분석', 'RRF 점수 융합'],
+    narration: '여덟 번째 단계, GraphDB 검색입니다. Neo4j 그래프 데이터베이스에서 논문 간 인용 관계와 저자, 키워드 네트워크를 탐색합니다.',
+  },
+  {
+    id: 9,
     name: 'Reranking',
     nameKo: '리랭킹',
     description: 'Cross-Encoder로 검색 결과 재정렬',
     color: '#F97316',
     icon: '🎯',
     details: ['Cross-Encoder 모델', '쿼리-문서 관련성 재평가', 'Top-K 재정렬'],
-    narration: '여덟 번째 단계, 리랭킹입니다. Cross-Encoder 모델로 검색 결과의 관련성을 재평가하여 순위를 조정합니다.',
+    narration: '아홉 번째 단계, 리랭킹입니다. Cross-Encoder 모델로 검색 결과의 관련성을 재평가하여 순위를 조정합니다.',
   },
   {
-    id: 9,
+    id: 10,
     name: 'Context Building',
     nameKo: '컨텍스트 구성',
     description: '검색 결과 + 메모리로 프롬프트 구성',
     color: '#EF4444',
     icon: '📋',
     details: ['Top-K 문서 선택', '메모리 컨텍스트 병합', '프롬프트 템플릿 적용'],
-    narration: '아홉 번째 단계, 컨텍스트 구성입니다. 검색된 논문과 메모리 정보를 결합하여 AI 프롬프트를 구성합니다.',
+    narration: '열 번째 단계, 컨텍스트 구성입니다. 검색된 논문과 메모리 정보를 결합하여 AI 프롬프트를 구성합니다.',
   },
   {
-    id: 10,
+    id: 11,
     name: 'LLM Generation',
     nameKo: 'LLM 응답 생성',
     description: 'GPT-4로 답변 생성',
     color: '#22C55E',
     icon: '🤖',
     details: ['GPT-4 API 호출', '컨텍스트 기반 응답', '출처 인용 포함'],
-    narration: '열 번째 단계, LLM 응답 생성입니다. GPT-4 모델이 구성된 컨텍스트를 바탕으로 답변을 생성합니다.',
+    narration: '열한 번째 단계, LLM 응답 생성입니다. GPT-4 모델이 구성된 컨텍스트를 바탕으로 답변을 생성합니다.',
   },
   {
-    id: 11,
+    id: 12,
     name: 'Memory Save',
     nameKo: '메모리 저장',
     description: 'Q&A를 SQLite에 저장',
@@ -135,8 +146,12 @@ export default function PipelineAnimation() {
   const [showDetails, setShowDetails] = useState(true)
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
-  const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null)
   const isPlayingRef = useRef(false)  // 재생 상태 추적용
+
+  // 음성 목록 미리 로드 (한번만)
+  useEffect(() => {
+    loadVoices()
+  }, [])
 
   // isPlaying 상태를 ref에 동기화
   useEffect(() => {
@@ -156,63 +171,37 @@ export default function PipelineAnimation() {
 
   // 음성 합성 함수 (콜백으로 다음 단계 이동)
   const speak = useCallback((text: string, onComplete?: () => void) => {
-    if (!voiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) {
+    if (!voiceEnabled) {
       // 음성 비활성화 시 바로 콜백 실행
       onComplete?.()
       return
     }
 
-    // 이전 음성 중지
-    window.speechSynthesis.cancel()
+    setIsSpeaking(true)
 
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'ko-KR'
-    utterance.rate = 0.9  // 약간 느린 속도
-    utterance.pitch = 1.3  // 높은 피치 (여성스러운 톤)
-    utterance.volume = 1.0
-
-    // 여성 한국어 음성 찾기 (우선순위: Yuna > Sora > 여성 > 한국어)
-    const voices = window.speechSynthesis.getVoices()
-    const femaleKoreanVoice = voices.find(voice =>
-      voice.lang.includes('ko') &&
-      (voice.name.toLowerCase().includes('female') ||
-       voice.name.toLowerCase().includes('yuna') ||
-       voice.name.toLowerCase().includes('sora') ||
-       voice.name.includes('여성') ||
-       voice.name.includes('유나') ||
-       voice.name.includes('소라'))
-    ) || voices.find(voice =>
-      voice.lang.includes('ko') &&
-      !voice.name.toLowerCase().includes('male')
-    ) || voices.find(voice => voice.lang.includes('ko'))
-
-    if (femaleKoreanVoice) {
-      utterance.voice = femaleKoreanVoice
-    }
-
-    utterance.onstart = () => setIsSpeaking(true)
-    utterance.onend = () => {
-      setIsSpeaking(false)
-      // 음성 종료 후 재생 중이면 다음 단계로 이동
-      if (isPlayingRef.current && onComplete) {
-        setTimeout(onComplete, 500)  // 0.5초 대기 후 다음 단계
+    speakText(text, {
+      lang: 'ko',
+      rate: 1.0,
+      pitch: 1.1,
+      onStart: () => setIsSpeaking(true),
+      onEnd: () => {
+        setIsSpeaking(false)
+        // 음성 종료 후 재생 중이면 다음 단계로 이동
+        if (isPlayingRef.current && onComplete) {
+          setTimeout(onComplete, 500)
+        }
+      },
+      onError: () => {
+        setIsSpeaking(false)
+        onComplete?.()
       }
-    }
-    utterance.onerror = () => {
-      setIsSpeaking(false)
-      onComplete?.()
-    }
-
-    speechSynthRef.current = utterance
-    window.speechSynthesis.speak(utterance)
+    })
   }, [voiceEnabled])
 
   // 음성 중지 함수
   const stopSpeaking = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-      setIsSpeaking(false)
-    }
+    stopSpeech()
+    setIsSpeaking(false)
   }, [])
 
   // 단계 변경 시 음성 재생 (음성 활성화 + 재생 중일 때)
@@ -393,15 +382,15 @@ export default function PipelineAnimation() {
           />
         </div>
 
-        {/* Bottom Row (Steps 7-11) - Reversed order for flow */}
+        {/* Bottom Row (Steps 7-12) - Reversed order for flow */}
         <div className="flex items-center justify-between flex-row-reverse">
           {PIPELINE_STEPS.slice(6)
             .reverse()
             .map((step, revIndex) => {
-              const index = 10 - revIndex
+              const index = 11 - revIndex
               return (
                 <div key={step.id} className="flex items-center">
-                  {revIndex < 4 && (
+                  {revIndex < 5 && (
                     <div className="mx-1">
                       <ChevronRight
                         size={20}
@@ -421,8 +410,6 @@ export default function PipelineAnimation() {
                 </div>
               )
             })}
-          {/* Spacer for alignment with top row */}
-          <div className="w-14" />
         </div>
       </div>
 
@@ -657,7 +644,28 @@ async def hybrid_search(query_emb, query_text, top_k=20):
     # Score fusion
     return fuse_scores(dense_results, sparse_results, weights=[0.7, 0.3])`,
 
-    8: `# Reranking (Cross-Encoder)
+    8: `# GraphDB 검색 (Neo4j)
+def graph_enhanced_search(seed_pmids: list, max_depth: int = 2):
+    query = """
+    UNWIND $seed_pmids AS seed_pmid
+    MATCH (seed:Paper {pmid: seed_pmid})
+    CALL {
+        WITH seed
+        MATCH (seed)-[:CITES*1..2]-(related:Paper)  // 인용 관계
+        RETURN related, 'citation' AS path_type, 1.0 AS score
+        UNION
+        MATCH (seed)-[:HAS_KEYWORD]->(k)<-[:HAS_KEYWORD]-(related)  // 키워드 관계
+        RETURN related, 'keyword' AS path_type, 0.8 AS score
+        UNION
+        MATCH (seed)<-[:AUTHORED]-(a)-[:AUTHORED]->(related)  // 저자 관계
+        RETURN related, 'author' AS path_type, 0.7 AS score
+    }
+    RETURN DISTINCT related.pmid, related.title, sum(score) AS relevance
+    ORDER BY relevance DESC LIMIT 10
+    """
+    return neo4j.run(query, seed_pmids=seed_pmids)`,
+
+    9: `# Reranking (Cross-Encoder)
 async def rerank_results(query: str, candidates: list, top_k: int = 5):
     from sentence_transformers import CrossEncoder
     reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
@@ -670,11 +678,16 @@ async def rerank_results(query: str, candidates: list, top_k: int = 5):
     reranked = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
     return [doc for doc, score in reranked[:top_k]]`,
 
-    9: `# 컨텍스트 구성 (논문 + 메모리)
-def build_context(papers: list, memories: list) -> str:
+    10: `# 컨텍스트 구성 (논문 + 메모리 + 그래프)
+def build_context(papers: list, memories: list, graph_context: dict) -> str:
     context = ["📚 관련 논문:"]
     for paper in papers[:5]:
         context.append(f"[PMID:{paper.pmid}] {paper.title}\\n{paper.abstract[:300]}...")
+
+    if graph_context:
+        context.append("\\n🕸️ 그래프 연결:")
+        context.append(f"  인용 연결: {graph_context.get('citations', 0)}개")
+        context.append(f"  관련 저자: {graph_context.get('authors', 0)}명")
 
     if memories:
         context.append("\\n🧠 관련 과거 대화:")
@@ -683,7 +696,7 @@ def build_context(papers: list, memories: list) -> str:
 
     return "\\n".join(context)`,
 
-    10: `# LLM 응답 생성
+    11: `# LLM 응답 생성
 async def generate_answer(question: str, context: str) -> str:
     response = await openai.chat.completions.create(
         model="gpt-4",
@@ -694,7 +707,7 @@ async def generate_answer(question: str, context: str) -> str:
     )
     return response.choices[0].message.content`,
 
-    11: `# 메모리 저장 (SQLite)
+    12: `# 메모리 저장 (SQLite)
 def save_conversation(query: str, answer: str, sources: list):
     query_hash = hashlib.md5(query.lower().strip().encode()).hexdigest()
     sources_str = ",".join(sources) if sources else ""
