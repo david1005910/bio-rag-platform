@@ -71,7 +71,7 @@ export default function ChatPage() {
     const utterance = new SpeechSynthesisUtterance(finalAnswer)
     utterance.lang = 'ko-KR'
     utterance.rate = 1.3  // 빠른 속도
-    utterance.pitch = 0.9  // 낮은 피치 (남성 목소리)
+    utterance.pitch = 1.2  // 높은 피치 (어린 남자 목소리)
     utterance.volume = 1.0
 
     // 남성 한국어 음성 찾기
