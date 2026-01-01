@@ -94,7 +94,7 @@ export default function ChatPage() {
     const utterance = new SpeechSynthesisUtterance(finalAnswer)
     utterance.lang = language === 'ko' ? 'ko-KR' : 'en-US'
     utterance.rate = 1.1  // 약간 빠른 속도
-    utterance.pitch = language === 'ko' ? 1.1 : 1.5  // 한국어(Yuna): 1.1, 영어(Shelley): 1.5
+    utterance.pitch = language === 'ko' ? 1.1 : 1.3  // 한국어(Yuna): 1.1, 영어(Shelley): 1.3
     utterance.volume = 1.0
 
     // 언어에 따라 음성 선택: 한국어=Yuna, 영어=Sandy
