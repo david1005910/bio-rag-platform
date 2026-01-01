@@ -244,6 +244,8 @@ export interface ChatQueryOptions {
 export interface ChatQueryResponseExtended extends ChatQueryResponse {
   vectordbUsed: boolean
   searchMode?: string
+  memoryUsed?: boolean
+  similarQuestionsFound?: number
 }
 
 // API response source (snake_case from backend)
@@ -266,6 +268,7 @@ export const chatApi = {
       useVectordb?: boolean
       searchMode?: 'hybrid' | 'dense' | 'sparse'
       denseWeight?: number
+      useMemory?: boolean
     }
   ): Promise<ChatQueryResponseExtended> => {
     const response = await api.post('/chat/query', {
@@ -275,6 +278,7 @@ export const chatApi = {
       use_vectordb: options?.useVectordb ?? true,
       search_mode: options?.searchMode ?? 'hybrid',
       dense_weight: options?.denseWeight ?? 0.7,
+      use_memory: options?.useMemory ?? true,
     })
     return {
       answer: response.data.answer,
@@ -289,6 +293,8 @@ export const chatApi = {
       sessionId: response.data.session_id,
       vectordbUsed: response.data.vectordb_used,
       searchMode: response.data.search_mode,
+      memoryUsed: response.data.memory_used,
+      similarQuestionsFound: response.data.similar_questions_found,
     }
   },
 

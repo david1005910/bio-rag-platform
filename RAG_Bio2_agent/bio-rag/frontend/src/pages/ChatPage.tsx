@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Send, Loader2, BookOpen, RefreshCw, Database, Search, ExternalLink, FileText, ChevronUp, ChevronDown } from 'lucide-react'
+import { Send, Loader2, BookOpen, RefreshCw, Database, Search, ExternalLink, FileText, ChevronUp, ChevronDown, Brain } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { chatApi } from '@/services/api'
@@ -11,11 +11,14 @@ import type { ChatMessage } from '@/types'
 interface ExtendedChatMessage extends ChatMessage {
   vectordbUsed?: boolean
   searchMode?: string
+  memoryUsed?: boolean
+  similarQuestionsFound?: number
 }
 
 export default function ChatPage() {
   const [input, setInput] = useState('')
   const [useVectordb, setUseVectordb] = useState(true)
+  const [useMemory, setUseMemory] = useState(true)
   const [searchMode, setSearchMode] = useState<'hybrid' | 'dense' | 'sparse'>('hybrid')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const {
@@ -40,6 +43,7 @@ export default function ChatPage() {
       chatApi.query(question, currentSessionId || undefined, undefined, {
         useVectordb,
         searchMode,
+        useMemory,
       }),
     onMutate: () => {
       setLoading(true)
@@ -66,6 +70,8 @@ export default function ChatPage() {
         createdAt: new Date().toISOString(),
         vectordbUsed: data.vectordbUsed,
         searchMode: data.searchMode,
+        memoryUsed: data.memoryUsed,
+        similarQuestionsFound: data.similarQuestionsFound,
       }
       addMessage(assistantMessage)
       setLoading(false)
@@ -148,8 +154,8 @@ export default function ChatPage() {
           </button>
         </div>
 
-        {/* VectorDB Controls */}
-        <div className="flex items-center gap-4 pt-3 border-t border-white/10">
+        {/* VectorDB & Memory Controls */}
+        <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-white/10">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -177,6 +183,21 @@ export default function ChatPage() {
               </select>
             </div>
           )}
+
+          <div className="w-px h-5 bg-slate-300 hidden sm:block" />
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useMemory}
+              onChange={(e) => setUseMemory(e.target.checked)}
+              className="w-4 h-4 rounded accent-pink-500"
+            />
+            <Brain size={16} className={useMemory ? 'text-pink-500' : 'text-slate-400'} />
+            <span className={`text-sm font-medium ${useMemory ? 'text-pink-600' : 'text-slate-500'}`}>
+              대화 기억
+            </span>
+          </label>
         </div>
       </div>
 
@@ -385,13 +406,25 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
         {/* Main content */}
         {renderContent(message.content)}
 
-        {/* VectorDB indicator */}
-        {!isUser && message.vectordbUsed && (
-          <div className="mt-3 flex items-center gap-2 text-xs">
-            <Database size={12} className="text-purple-500" />
-            <span className="text-purple-600 font-medium">
-              VectorDB 검색 사용 ({message.searchMode === 'hybrid' ? 'Hybrid' : message.searchMode === 'dense' ? 'Dense' : 'Sparse'})
-            </span>
+        {/* VectorDB & Memory indicator */}
+        {!isUser && (message.vectordbUsed || message.memoryUsed) && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+            {message.vectordbUsed && (
+              <div className="flex items-center gap-1.5">
+                <Database size={12} className="text-purple-500" />
+                <span className="text-purple-600 font-medium">
+                  VectorDB ({message.searchMode === 'hybrid' ? 'Hybrid' : message.searchMode === 'dense' ? 'Dense' : 'Sparse'})
+                </span>
+              </div>
+            )}
+            {message.memoryUsed && (
+              <div className="flex items-center gap-1.5">
+                <Brain size={12} className="text-pink-500" />
+                <span className="text-pink-600 font-medium">
+                  대화 기억 사용 ({message.similarQuestionsFound}개 참조)
+                </span>
+              </div>
+            )}
           </div>
         )}
 
