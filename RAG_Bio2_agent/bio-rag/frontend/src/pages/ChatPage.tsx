@@ -74,23 +74,16 @@ export default function ChatPage() {
     utterance.pitch = 1.3  // 높은 피치 (여성 목소리)
     utterance.volume = 1.0
 
-    // 여성 한국어 음성 찾기
+    // Yuna 음성 찾기 (표준 한국어 여성)
     const voices = window.speechSynthesis.getVoices()
-    const femaleKoreanVoice = voices.find(voice =>
-      voice.lang.includes('ko') &&
-      (voice.name.toLowerCase().includes('female') ||
-       voice.name.toLowerCase().includes('yuna') ||
-       voice.name.toLowerCase().includes('sora') ||
-       voice.name.includes('여성') ||
-       voice.name.includes('유나') ||
-       voice.name.includes('소라'))
+    const yunaVoice = voices.find(voice =>
+      voice.name.toLowerCase().includes('yuna')
     ) || voices.find(voice =>
-      voice.lang.includes('ko') &&
-      !voice.name.toLowerCase().includes('male')
-    ) || voices.find(voice => voice.lang.includes('ko'))
+      voice.lang.includes('ko')
+    )
 
-    if (femaleKoreanVoice) {
-      utterance.voice = femaleKoreanVoice
+    if (yunaVoice) {
+      utterance.voice = yunaVoice
     }
 
     utterance.onstart = () => setSpeakingMessageId(messageId)
