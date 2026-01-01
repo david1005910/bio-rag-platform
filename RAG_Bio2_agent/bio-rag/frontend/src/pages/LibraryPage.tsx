@@ -60,14 +60,6 @@ export default function LibraryPage() {
           <p className="liquid-text-muted mt-1">저장된 Meta 데이터를 관리하세요</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* 논문 검색 버튼 */}
-          <Link
-            to="/search"
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all hover:scale-105"
-          >
-            <SearchIcon size={20} />
-            논문 검색
-          </Link>
           {/* 통계 표시 */}
           <div className="flex items-center gap-2 bg-white/60 px-4 py-2 rounded-xl border border-slate-200">
             <FolderOpen className="text-purple-500" size={24} />
