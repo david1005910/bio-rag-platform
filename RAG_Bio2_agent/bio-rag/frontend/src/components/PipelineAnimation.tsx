@@ -136,10 +136,29 @@ export default function PipelineAnimation() {
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const isPlayingRef = useRef(false)  // 재생 상태 추적용
 
-  // 음성 합성 함수
-  const speak = useCallback((text: string) => {
+  // isPlaying 상태를 ref에 동기화
+  useEffect(() => {
+    isPlayingRef.current = isPlaying
+  }, [isPlaying])
+
+  // 다음 단계로 이동하는 함수
+  const goToNextStep = useCallback(() => {
+    setCurrentStep((prev) => {
+      if (prev >= PIPELINE_STEPS.length - 1) {
+        setIsPlaying(false)
+        return prev
+      }
+      return prev + 1
+    })
+  }, [])
+
+  // 음성 합성 함수 (콜백으로 다음 단계 이동)
+  const speak = useCallback((text: string, onComplete?: () => void) => {
     if (!voiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) {
+      // 음성 비활성화 시 바로 콜백 실행
+      onComplete?.()
       return
     }
 
@@ -149,7 +168,7 @@ export default function PipelineAnimation() {
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'ko-KR'
     utterance.rate = 1.0  // 정상 속도
-    utterance.pitch = 1.1  // 약간 높은 피치 (여성스러운 톤)
+    utterance.pitch = 1.3  // 높은 피치 (더 여성스러운 톤)
     utterance.volume = 1.0
 
     // 여성 한국어 음성 찾기 (우선순위: Yuna > Sora > 여성 > 한국어)
@@ -172,8 +191,17 @@ export default function PipelineAnimation() {
     }
 
     utterance.onstart = () => setIsSpeaking(true)
-    utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => setIsSpeaking(false)
+    utterance.onend = () => {
+      setIsSpeaking(false)
+      // 음성 종료 후 재생 중이면 다음 단계로 이동
+      if (isPlayingRef.current && onComplete) {
+        setTimeout(onComplete, 500)  // 0.5초 대기 후 다음 단계
+      }
+    }
+    utterance.onerror = () => {
+      setIsSpeaking(false)
+      onComplete?.()
+    }
 
     speechSynthRef.current = utterance
     window.speechSynthesis.speak(utterance)
@@ -187,12 +215,12 @@ export default function PipelineAnimation() {
     }
   }, [])
 
-  // 단계 변경 시 음성 재생
+  // 단계 변경 시 음성 재생 (음성 활성화 + 재생 중일 때)
   useEffect(() => {
     if (voiceEnabled && isPlaying) {
-      speak(PIPELINE_STEPS[currentStep].narration)
+      speak(PIPELINE_STEPS[currentStep].narration, goToNextStep)
     }
-  }, [currentStep, voiceEnabled, isPlaying, speak])
+  }, [currentStep, voiceEnabled, isPlaying, speak, goToNextStep])
 
   // 음성 기능 토글 시 현재 단계 설명
   useEffect(() => {
@@ -210,12 +238,12 @@ export default function PipelineAnimation() {
     }
   }, [stopSpeaking])
 
-  // 애니메이션 간격 조정 (음성 활성화 시 더 긴 간격)
+  // 애니메이션 (음성 비활성화 시에만 interval 사용)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
 
-    if (isPlaying) {
-      const intervalTime = voiceEnabled ? 5000 : 2000  // 음성 시 5초, 아니면 2초
+    if (isPlaying && !voiceEnabled) {
+      // 음성 비활성화 시: 2초 간격으로 자동 진행
       interval = setInterval(() => {
         setCurrentStep((prev) => {
           if (prev >= PIPELINE_STEPS.length - 1) {
@@ -224,8 +252,9 @@ export default function PipelineAnimation() {
           }
           return prev + 1
         })
-      }, intervalTime)
+      }, 2000)
     }
+    // 음성 활성화 시: speak 함수의 onend 콜백에서 다음 단계로 이동
 
     return () => {
       if (interval) clearInterval(interval)
