@@ -120,8 +120,9 @@ export default function ChatPage() {
           ).map(([, source]) => source)
         : []
 
+      const messageId = Date.now().toString()
       const assistantMessage: ExtendedChatMessage = {
-        id: Date.now().toString(),
+        id: messageId,
         role: 'assistant',
         content: data.answer,
         sources: uniqueSources,
@@ -133,6 +134,11 @@ export default function ChatPage() {
       }
       addMessage(assistantMessage)
       setLoading(false)
+
+      // 음성 읽기 활성화 시 자동으로 최종 답변 읽기
+      if (voiceEnabled) {
+        setTimeout(() => speak(data.answer, messageId), 500)
+      }
     },
     onError: () => {
       const errorMessage: ChatMessage = {
@@ -305,16 +311,22 @@ export default function ChatPage() {
           </div>
         )}
 
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            voiceEnabled={voiceEnabled}
-            isSpeaking={speakingMessageId === message.id}
-            onSpeak={() => speak(message.content, message.id)}
-            onStop={stopSpeaking}
-          />
-        ))}
+        {messages.map((message, index) => {
+          const isLastAssistant = message.role === 'assistant' &&
+            index === messages.length - 1 ||
+            (index === messages.length - 2 && messages[messages.length - 1]?.role === 'user')
+          return (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              voiceEnabled={voiceEnabled}
+              isSpeaking={speakingMessageId === message.id}
+              onSpeak={() => speak(message.content, message.id)}
+              onStop={stopSpeaking}
+              showVoiceButton={isLastAssistant}
+            />
+          )
+        })}
 
         {isLoading && (
           <div className="flex justify-start">
@@ -424,9 +436,10 @@ interface MessageBubbleProps {
   isSpeaking: boolean
   onSpeak: () => void
   onStop: () => void
+  showVoiceButton?: boolean
 }
 
-function MessageBubble({ message, voiceEnabled, isSpeaking, onSpeak, onStop }: MessageBubbleProps) {
+function MessageBubble({ message, voiceEnabled, isSpeaking, onSpeak, onStop, showVoiceButton }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   // Simple markdown-like rendering for AI responses
@@ -496,8 +509,8 @@ function MessageBubble({ message, voiceEnabled, isSpeaking, onSpeak, onStop }: M
         {/* Main content */}
         {renderContent(message.content)}
 
-        {/* Voice button for assistant messages */}
-        {!isUser && voiceEnabled && (
+        {/* Voice button for last assistant message only */}
+        {!isUser && voiceEnabled && showVoiceButton && (
           <div className="mt-3 flex justify-end">
             <button
               onClick={isSpeaking ? onStop : onSpeak}
