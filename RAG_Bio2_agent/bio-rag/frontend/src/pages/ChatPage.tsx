@@ -58,7 +58,16 @@ export default function ChatPage() {
     return paragraphs.length > 0 ? paragraphs[paragraphs.length - 1].replace(/\*\*/g, '').trim() : text
   }
 
-  // 음성 합성 함수 (남자 목소리로 최종답변만 읽기)
+  // 언어 감지 함수 (한국어 비율 체크)
+  const detectLanguage = (text: string): 'ko' | 'en' => {
+    const koreanRegex = /[가-힣]/g
+    const koreanMatches = text.match(koreanRegex) || []
+    const totalChars = text.replace(/\s/g, '').length
+    const koreanRatio = koreanMatches.length / totalChars
+    return koreanRatio > 0.3 ? 'ko' : 'en'
+  }
+
+  // 음성 합성 함수 (언어에 따라 음성 자동 선택)
   const speak = useCallback((text: string, messageId: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
 
@@ -68,22 +77,39 @@ export default function ChatPage() {
     // 최종답변만 추출
     const finalAnswer = extractFinalAnswer(text)
 
+    // 언어 감지
+    const language = detectLanguage(finalAnswer)
+
     const utterance = new SpeechSynthesisUtterance(finalAnswer)
-    utterance.lang = 'ko-KR'
+    utterance.lang = language === 'ko' ? 'ko-KR' : 'en-US'
     utterance.rate = 1.0  // 정상 속도
     utterance.pitch = 1.3  // 높은 피치 (여성 목소리)
     utterance.volume = 1.0
 
-    // Yuna 음성 찾기 (표준 한국어 여성)
+    // 언어에 따라 음성 선택: 한국어=Yuna, 영어=Sandy
     const voices = window.speechSynthesis.getVoices()
-    const yunaVoice = voices.find(voice =>
-      voice.name.toLowerCase().includes('yuna')
-    ) || voices.find(voice =>
-      voice.lang.includes('ko')
-    )
+    let selectedVoice
 
-    if (yunaVoice) {
-      utterance.voice = yunaVoice
+    if (language === 'ko') {
+      // 한국어: Yuna 음성
+      selectedVoice = voices.find(voice =>
+        voice.name.toLowerCase().includes('yuna')
+      ) || voices.find(voice =>
+        voice.lang.includes('ko')
+      )
+    } else {
+      // 영어: Sandy 음성
+      selectedVoice = voices.find(voice =>
+        voice.name.toLowerCase().includes('sandy') && voice.lang.includes('en')
+      ) || voices.find(voice =>
+        voice.lang.includes('en') && voice.name.toLowerCase().includes('female')
+      ) || voices.find(voice =>
+        voice.lang.includes('en')
+      )
+    }
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice
     }
 
     utterance.onstart = () => setSpeakingMessageId(messageId)
