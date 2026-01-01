@@ -148,7 +148,7 @@ export default function PipelineAnimation() {
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'ko-KR'
-    utterance.rate = 1.3  // 빠른 속도
+    utterance.rate = 1.0  // 정상 속도
     utterance.pitch = 1.1  // 약간 높은 피치 (여성스러운 톤)
     utterance.volume = 1.0
 
@@ -215,7 +215,7 @@ export default function PipelineAnimation() {
     let interval: ReturnType<typeof setInterval> | null = null
 
     if (isPlaying) {
-      const intervalTime = voiceEnabled ? 4000 : 2000  // 음성 시 4초 (빠른 속도), 아니면 2초
+      const intervalTime = voiceEnabled ? 5000 : 2000  // 음성 시 5초, 아니면 2초
       interval = setInterval(() => {
         setCurrentStep((prev) => {
           if (prev >= PIPELINE_STEPS.length - 1) {
