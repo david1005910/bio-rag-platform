@@ -32,11 +32,11 @@ export default function ChatPage() {
     clearMessages,
   } = useChatStore()
 
-  // 최종답변 추출 함수
+  // 최종답변 추출 함수 (제목과 인용 논문 제외)
   const extractFinalAnswer = (text: string): string => {
     // "4. 최종 답변" 또는 "## 4." 또는 "Final Answer" 섹션 찾기
     const patterns = [
-      /(?:##\s*)?4\.\s*(?:최종\s*)?답변[^]*?(?=(?:##\s*)?5\.|---|\*\*\*|$)/i,
+      /(?:##\s*)?(?:✨\s*)?4\.\s*(?:최종\s*)?답변[^]*?(?=(?:##\s*)?5\.|---|\*\*\*|$)/i,
       /(?:##\s*)?(?:최종|Final)\s*(?:답변|Answer)[^]*?(?=(?:##\s*)?\d+\.|---|\*\*\*|$)/i,
       /4\.[^]*?(?=5\.|---|\*\*\*|$)/i,
     ]
@@ -44,12 +44,23 @@ export default function ChatPage() {
     for (const pattern of patterns) {
       const match = text.match(pattern)
       if (match && match[0].length > 50) {
-        // 마크다운 기호 제거
-        return match[0]
+        let result = match[0]
+          // 제목 제거 (4. 최종 답변, ## ✨ 4. 최종 답변 등)
+          .replace(/^(?:##\s*)?(?:✨\s*)?4\.\s*(?:최종\s*)?(?:답변|Final\s*Answer)[^\n]*/i, '')
+          // 인용된 논문 섹션 제거
+          .replace(/(?:###?\s*)?📚\s*인용된?\s*논문[^]*/i, '')
+          .replace(/(?:###?\s*)?(?:References?|Citations?|인용\s*문헌)[^]*/i, '')
+          // ### 서브 제목 라인 제거 (### 핵심 요약, ### 상세 설명 등)
+          .replace(/^###[^\n]*$/gm, '')
+          // 괄호 안 내용 제거 (예: (PMID:12345), (참고) 등)
+          .replace(/\([^)]*\)/g, '')
+          // 마크다운 기호 제거
           .replace(/#{1,6}\s*/g, '')
           .replace(/\*\*/g, '')
+          .replace(/📌|📖|⚠️|💡/g, '')  // 이모지 제거
           .replace(/\n+/g, ' ')
           .trim()
+        return result
       }
     }
 
@@ -82,8 +93,8 @@ export default function ChatPage() {
 
     const utterance = new SpeechSynthesisUtterance(finalAnswer)
     utterance.lang = language === 'ko' ? 'ko-KR' : 'en-US'
-    utterance.rate = 1.0  // 정상 속도
-    utterance.pitch = 1.3  // 높은 피치 (여성 목소리)
+    utterance.rate = 1.1  // 약간 빠른 속도
+    utterance.pitch = language === 'ko' ? 1.1 : 1.5  // 한국어(Yuna): 1.1, 영어(Shelley): 1.5
     utterance.volume = 1.0
 
     // 언어에 따라 음성 선택: 한국어=Yuna, 영어=Sandy
@@ -327,7 +338,8 @@ export default function ChatPage() {
             {voiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
             <span className="text-sm font-medium">음성 읽기</span>
           </button>
-        </div>
+
+                  </div>
       </div>
 
       {/* Messages */}
