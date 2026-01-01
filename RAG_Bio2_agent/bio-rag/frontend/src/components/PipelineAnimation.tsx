@@ -72,6 +72,15 @@ const PIPELINE_STEPS: PipelineStep[] = [
   },
   {
     id: 7,
+    name: 'Reranking',
+    nameKo: '리랭킹',
+    description: 'Cross-Encoder로 검색 결과 재정렬',
+    color: '#F97316',
+    icon: '🎯',
+    details: ['Cross-Encoder 모델', '쿼리-문서 관련성 재평가', 'Top-K 재정렬'],
+  },
+  {
+    id: 8,
     name: 'Context Building',
     nameKo: '컨텍스트 구성',
     description: '검색 결과로 프롬프트 구성',
@@ -80,7 +89,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     details: ['Top-K 문서 선택', '관련성 점수 기반 정렬', '프롬프트 템플릿 적용'],
   },
   {
-    id: 8,
+    id: 9,
     name: 'LLM Generation',
     nameKo: 'LLM 응답 생성',
     description: 'GPT-4로 답변 생성',
@@ -190,9 +199,9 @@ export default function PipelineAnimation() {
 
       {/* Pipeline Steps - Desktop: 2 rows, Mobile: Single column */}
       <div className="hidden lg:block">
-        {/* Top Row (Steps 1-4) */}
+        {/* Top Row (Steps 1-5) */}
         <div className="flex items-center justify-between mb-4">
-          {PIPELINE_STEPS.slice(0, 4).map((step, index) => (
+          {PIPELINE_STEPS.slice(0, 5).map((step, index) => (
             <div key={step.id} className="flex items-center">
               <StepBox
                 step={step}
@@ -201,10 +210,10 @@ export default function PipelineAnimation() {
                 onClick={() => handleStepClick(index)}
                 showDetails={showDetails && currentStep === index}
               />
-              {index < 3 && (
-                <div className="mx-2">
+              {index < 4 && (
+                <div className="mx-1">
                   <ChevronRight
-                    size={24}
+                    size={20}
                     className={`transition-all duration-300 ${
                       currentStep > index ? 'text-cyan-400' : 'text-white/20'
                     }`}
@@ -216,26 +225,26 @@ export default function PipelineAnimation() {
         </div>
 
         {/* Connector between rows */}
-        <div className="flex justify-end pr-[60px] mb-4">
+        <div className="flex justify-end pr-[50px] mb-4">
           <div
             className={`w-1 h-8 rounded-full transition-all duration-300 ${
-              currentStep >= 4 ? 'bg-cyan-400' : 'bg-white/20'
+              currentStep >= 5 ? 'bg-cyan-400' : 'bg-white/20'
             }`}
           />
         </div>
 
-        {/* Bottom Row (Steps 5-8) - Reversed order for flow */}
-        <div className="flex items-center justify-between flex-row-reverse">
-          {PIPELINE_STEPS.slice(4)
+        {/* Bottom Row (Steps 6-9) - Reversed order for flow */}
+        <div className="flex items-center justify-end gap-1 flex-row-reverse">
+          {PIPELINE_STEPS.slice(5)
             .reverse()
             .map((step, revIndex) => {
-              const index = 7 - revIndex
+              const index = 8 - revIndex
               return (
                 <div key={step.id} className="flex items-center">
                   {revIndex < 3 && (
-                    <div className="mx-2">
+                    <div className="mx-1">
                       <ChevronRight
-                        size={24}
+                        size={20}
                         className={`rotate-180 transition-all duration-300 ${
                           currentStep > index ? 'text-cyan-400' : 'text-white/20'
                         }`}
@@ -383,7 +392,7 @@ function StepBox({
       }`}
     >
       <div
-        className={`w-32 h-28 rounded-xl p-3 flex flex-col items-center justify-center transition-all duration-300 ${
+        className={`w-28 h-24 rounded-xl p-2 flex flex-col items-center justify-center transition-all duration-300 ${
           isActive ? 'ring-2 ring-offset-2 ring-offset-slate-900 ring-cyan-400' : ''
         }`}
         style={{
@@ -459,7 +468,7 @@ async def process_query(question: str) -> dict:
     return {"embedding": query_embedding, "original": question}`,
 
     6: `# 하이브리드 검색
-async def hybrid_search(query_emb, query_text, top_k=10):
+async def hybrid_search(query_emb, query_text, top_k=20):
     # Dense search (70%)
     dense_results = await qdrant.search(
         collection="papers", query_vector=query_emb, limit=top_k
@@ -470,7 +479,21 @@ async def hybrid_search(query_emb, query_text, top_k=10):
     # Score fusion
     return fuse_scores(dense_results, sparse_results, weights=[0.7, 0.3])`,
 
-    7: `# 컨텍스트 구성
+    7: `# Reranking (Cross-Encoder)
+async def rerank_results(query: str, candidates: list, top_k: int = 5):
+    # Cross-Encoder 모델로 쿼리-문서 관련성 재평가
+    from sentence_transformers import CrossEncoder
+    reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+    # 쿼리-문서 쌍 점수 계산
+    pairs = [(query, doc.text) for doc in candidates]
+    scores = reranker.predict(pairs)
+
+    # 점수 기준 재정렬
+    reranked = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
+    return [doc for doc, score in reranked[:top_k]]`,
+
+    8: `# 컨텍스트 구성
 def build_context(search_results: list, max_tokens: int = 4000) -> str:
     context_parts = []
     for result in search_results[:5]:  # Top-K 선택
@@ -480,7 +503,7 @@ def build_context(search_results: list, max_tokens: int = 4000) -> str:
         ''')
     return "\\n".join(context_parts)`,
 
-    8: `# LLM 응답 생성
+    9: `# LLM 응답 생성
 async def generate_answer(question: str, context: str) -> str:
     response = await openai.chat.completions.create(
         model="gpt-4",
