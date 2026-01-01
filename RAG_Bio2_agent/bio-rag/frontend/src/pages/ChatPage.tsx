@@ -32,36 +32,64 @@ export default function ChatPage() {
     clearMessages,
   } = useChatStore()
 
-  // 음성 합성 함수
+  // 최종답변 추출 함수
+  const extractFinalAnswer = (text: string): string => {
+    // "4. 최종 답변" 또는 "## 4." 또는 "Final Answer" 섹션 찾기
+    const patterns = [
+      /(?:##\s*)?4\.\s*(?:최종\s*)?답변[^]*?(?=(?:##\s*)?5\.|---|\*\*\*|$)/i,
+      /(?:##\s*)?(?:최종|Final)\s*(?:답변|Answer)[^]*?(?=(?:##\s*)?\d+\.|---|\*\*\*|$)/i,
+      /4\.[^]*?(?=5\.|---|\*\*\*|$)/i,
+    ]
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern)
+      if (match && match[0].length > 50) {
+        // 마크다운 기호 제거
+        return match[0]
+          .replace(/#{1,6}\s*/g, '')
+          .replace(/\*\*/g, '')
+          .replace(/\n+/g, ' ')
+          .trim()
+      }
+    }
+
+    // 패턴을 찾지 못하면 마지막 단락 반환
+    const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 50)
+    return paragraphs.length > 0 ? paragraphs[paragraphs.length - 1].replace(/\*\*/g, '').trim() : text
+  }
+
+  // 음성 합성 함수 (남자 목소리로 최종답변만 읽기)
   const speak = useCallback((text: string, messageId: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
 
     // 이전 음성 중지
     window.speechSynthesis.cancel()
 
-    const utterance = new SpeechSynthesisUtterance(text)
+    // 최종답변만 추출
+    const finalAnswer = extractFinalAnswer(text)
+
+    const utterance = new SpeechSynthesisUtterance(finalAnswer)
     utterance.lang = 'ko-KR'
     utterance.rate = 1.0
-    utterance.pitch = 1.3  // 여성스러운 톤
+    utterance.pitch = 0.9  // 낮은 피치 (남성 목소리)
     utterance.volume = 1.0
 
-    // 여성 한국어 음성 찾기
+    // 남성 한국어 음성 찾기
     const voices = window.speechSynthesis.getVoices()
-    const femaleKoreanVoice = voices.find(voice =>
+    const maleKoreanVoice = voices.find(voice =>
       voice.lang.includes('ko') &&
-      (voice.name.toLowerCase().includes('female') ||
-       voice.name.toLowerCase().includes('yuna') ||
-       voice.name.toLowerCase().includes('sora') ||
-       voice.name.includes('여성') ||
-       voice.name.includes('유나') ||
-       voice.name.includes('소라'))
+      (voice.name.toLowerCase().includes('male') ||
+       voice.name.includes('남성') ||
+       voice.name.toLowerCase().includes('junwoo') ||
+       voice.name.includes('준우'))
     ) || voices.find(voice =>
       voice.lang.includes('ko') &&
-      !voice.name.toLowerCase().includes('male')
+      !voice.name.toLowerCase().includes('female') &&
+      !voice.name.includes('여성')
     ) || voices.find(voice => voice.lang.includes('ko'))
 
-    if (femaleKoreanVoice) {
-      utterance.voice = femaleKoreanVoice
+    if (maleKoreanVoice) {
+      utterance.voice = maleKoreanVoice
     }
 
     utterance.onstart = () => setSpeakingMessageId(messageId)
