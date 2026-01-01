@@ -167,7 +167,7 @@ export default function PipelineAnimation() {
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'ko-KR'
-    utterance.rate = 1.0  // 정상 속도
+    utterance.rate = 0.9  // 약간 느린 속도
     utterance.pitch = 1.3  // 높은 피치 (여성스러운 톤)
     utterance.volume = 1.0
 
