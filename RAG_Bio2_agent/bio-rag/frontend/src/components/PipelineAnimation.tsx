@@ -234,7 +234,7 @@ export default function PipelineAnimation() {
         </div>
 
         {/* Bottom Row (Steps 6-9) - Reversed order for flow */}
-        <div className="flex items-center justify-end gap-1 flex-row-reverse">
+        <div className="flex items-center justify-between flex-row-reverse">
           {PIPELINE_STEPS.slice(5)
             .reverse()
             .map((step, revIndex) => {
@@ -261,6 +261,8 @@ export default function PipelineAnimation() {
                 </div>
               )
             })}
+          {/* Spacer for alignment with top row */}
+          <div className="w-28" />
         </div>
       </div>
 
