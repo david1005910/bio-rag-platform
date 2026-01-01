@@ -98,9 +98,9 @@ export default function ChatPage() {
         voice.lang.includes('ko')
       )
     } else {
-      // 영어: Sandy 음성
+      // 영어: Shelley 음성
       selectedVoice = voices.find(voice =>
-        voice.name.toLowerCase().includes('sandy') && voice.lang.includes('en')
+        voice.name.toLowerCase().includes('shelley') && voice.lang.includes('en')
       ) || voices.find(voice =>
         voice.lang.includes('en') && voice.name.toLowerCase().includes('female')
       ) || voices.find(voice =>
