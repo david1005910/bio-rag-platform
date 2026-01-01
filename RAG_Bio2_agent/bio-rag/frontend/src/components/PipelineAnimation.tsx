@@ -63,6 +63,15 @@ const PIPELINE_STEPS: PipelineStep[] = [
   },
   {
     id: 6,
+    name: 'Memory Search',
+    nameKo: '메모리 검색',
+    description: 'SQLite에서 유사한 과거 Q&A 검색',
+    color: '#DB2777',
+    icon: '🧠',
+    details: ['FTS5 전문 검색', 'BM25 유사도 랭킹', '과거 대화 컨텍스트 추출'],
+  },
+  {
+    id: 7,
     name: 'Hybrid Search',
     nameKo: '하이브리드 검색',
     description: 'Dense + Sparse 검색 융합',
@@ -71,7 +80,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
     details: ['Dense: 의미 유사도 (70%)', 'Sparse: 키워드 매칭 (30%)', 'Score Fusion'],
   },
   {
-    id: 7,
+    id: 8,
     name: 'Reranking',
     nameKo: '리랭킹',
     description: 'Cross-Encoder로 검색 결과 재정렬',
@@ -80,22 +89,31 @@ const PIPELINE_STEPS: PipelineStep[] = [
     details: ['Cross-Encoder 모델', '쿼리-문서 관련성 재평가', 'Top-K 재정렬'],
   },
   {
-    id: 8,
+    id: 9,
     name: 'Context Building',
     nameKo: '컨텍스트 구성',
-    description: '검색 결과로 프롬프트 구성',
+    description: '검색 결과 + 메모리로 프롬프트 구성',
     color: '#EF4444',
     icon: '📋',
-    details: ['Top-K 문서 선택', '관련성 점수 기반 정렬', '프롬프트 템플릿 적용'],
+    details: ['Top-K 문서 선택', '메모리 컨텍스트 병합', '프롬프트 템플릿 적용'],
   },
   {
-    id: 9,
+    id: 10,
     name: 'LLM Generation',
     nameKo: 'LLM 응답 생성',
     description: 'GPT-4로 답변 생성',
     color: '#22C55E',
     icon: '🤖',
     details: ['GPT-4 API 호출', '컨텍스트 기반 응답', '출처 인용 포함'],
+  },
+  {
+    id: 11,
+    name: 'Memory Save',
+    nameKo: '메모리 저장',
+    description: 'Q&A를 SQLite에 저장',
+    color: '#7C3AED',
+    icon: '💿',
+    details: ['질문-답변 쌍 저장', '쿼리 해시 인덱싱', 'FTS 트리거 업데이트'],
   },
 ]
 
@@ -199,9 +217,9 @@ export default function PipelineAnimation() {
 
       {/* Pipeline Steps - Desktop: 2 rows, Mobile: Single column */}
       <div className="hidden lg:block">
-        {/* Top Row (Steps 1-5) */}
+        {/* Top Row (Steps 1-6) */}
         <div className="flex items-center justify-between mb-4">
-          {PIPELINE_STEPS.slice(0, 5).map((step, index) => (
+          {PIPELINE_STEPS.slice(0, 6).map((step, index) => (
             <div key={step.id} className="flex items-center">
               <StepBox
                 step={step}
@@ -210,7 +228,7 @@ export default function PipelineAnimation() {
                 onClick={() => handleStepClick(index)}
                 showDetails={showDetails && currentStep === index}
               />
-              {index < 4 && (
+              {index < 5 && (
                 <div className="mx-1">
                   <ChevronRight
                     size={20}
@@ -228,20 +246,20 @@ export default function PipelineAnimation() {
         <div className="flex justify-end pr-[50px] mb-4">
           <div
             className={`w-1 h-8 rounded-full transition-all duration-300 ${
-              currentStep >= 5 ? 'bg-cyan-400' : 'bg-white/20'
+              currentStep >= 6 ? 'bg-cyan-400' : 'bg-white/20'
             }`}
           />
         </div>
 
-        {/* Bottom Row (Steps 6-9) - Reversed order for flow */}
+        {/* Bottom Row (Steps 7-11) - Reversed order for flow */}
         <div className="flex items-center justify-between flex-row-reverse">
-          {PIPELINE_STEPS.slice(5)
+          {PIPELINE_STEPS.slice(6)
             .reverse()
             .map((step, revIndex) => {
-              const index = 8 - revIndex
+              const index = 10 - revIndex
               return (
                 <div key={step.id} className="flex items-center">
-                  {revIndex < 3 && (
+                  {revIndex < 4 && (
                     <div className="mx-1">
                       <ChevronRight
                         size={20}
@@ -262,7 +280,7 @@ export default function PipelineAnimation() {
               )
             })}
           {/* Spacer for alignment with top row */}
-          <div className="w-28" />
+          <div className="w-14" />
         </div>
       </div>
 
@@ -469,7 +487,23 @@ async def process_query(question: str) -> dict:
     query_embedding = await generate_embedding(question)
     return {"embedding": query_embedding, "original": question}`,
 
-    6: `# 하이브리드 검색
+    6: `# 메모리 검색 (SQLite FTS5)
+def search_similar_conversations(query: str, limit: int = 3):
+    # 불용어 제거 후 키워드 추출
+    keywords = extract_keywords(query)
+    fts_query = " OR ".join(keywords)
+
+    # FTS5 전문 검색 + BM25 랭킹
+    cursor.execute("""
+        SELECT id, query, answer, bm25(conversations_fts) as score
+        FROM conversations_fts
+        JOIN conversations ON rowid = id
+        WHERE conversations_fts MATCH ?
+        ORDER BY score LIMIT ?
+    """, (fts_query, limit))
+    return cursor.fetchall()`,
+
+    7: `# 하이브리드 검색
 async def hybrid_search(query_emb, query_text, top_k=20):
     # Dense search (70%)
     dense_results = await qdrant.search(
@@ -481,9 +515,8 @@ async def hybrid_search(query_emb, query_text, top_k=20):
     # Score fusion
     return fuse_scores(dense_results, sparse_results, weights=[0.7, 0.3])`,
 
-    7: `# Reranking (Cross-Encoder)
+    8: `# Reranking (Cross-Encoder)
 async def rerank_results(query: str, candidates: list, top_k: int = 5):
-    # Cross-Encoder 모델로 쿼리-문서 관련성 재평가
     from sentence_transformers import CrossEncoder
     reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 
@@ -495,17 +528,20 @@ async def rerank_results(query: str, candidates: list, top_k: int = 5):
     reranked = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
     return [doc for doc, score in reranked[:top_k]]`,
 
-    8: `# 컨텍스트 구성
-def build_context(search_results: list, max_tokens: int = 4000) -> str:
-    context_parts = []
-    for result in search_results[:5]:  # Top-K 선택
-        context_parts.append(f'''
-        [PMID: {result.pmid}] {result.title}
-        {result.abstract[:500]}...
-        ''')
-    return "\\n".join(context_parts)`,
+    9: `# 컨텍스트 구성 (논문 + 메모리)
+def build_context(papers: list, memories: list) -> str:
+    context = ["📚 관련 논문:"]
+    for paper in papers[:5]:
+        context.append(f"[PMID:{paper.pmid}] {paper.title}\\n{paper.abstract[:300]}...")
 
-    9: `# LLM 응답 생성
+    if memories:
+        context.append("\\n🧠 관련 과거 대화:")
+        for mem in memories:
+            context.append(f"Q: {mem.query}\\nA: {mem.answer[:200]}...")
+
+    return "\\n".join(context)`,
+
+    10: `# LLM 응답 생성
 async def generate_answer(question: str, context: str) -> str:
     response = await openai.chat.completions.create(
         model="gpt-4",
@@ -515,6 +551,18 @@ async def generate_answer(question: str, context: str) -> str:
         ]
     )
     return response.choices[0].message.content`,
+
+    11: `# 메모리 저장 (SQLite)
+def save_conversation(query: str, answer: str, sources: list):
+    query_hash = hashlib.md5(query.lower().strip().encode()).hexdigest()
+    sources_str = ",".join(sources) if sources else ""
+
+    cursor.execute("""
+        INSERT INTO conversations (query, answer, query_hash, sources_used)
+        VALUES (?, ?, ?, ?)
+    """, (query, answer, query_hash, sources_str))
+    conn.commit()  # FTS 트리거가 자동으로 인덱스 업데이트
+    return cursor.lastrowid`,
   }
 
   return (
