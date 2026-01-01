@@ -139,24 +139,40 @@ class GraphRAGService:
         top_k: int,
         search_mode: str
     ) -> List[Dict[str, Any]]:
-        """Perform vector database search"""
+        """Perform vector database search using HybridVectorStore"""
         if not self.vector_service:
             # Import here to avoid circular imports
             try:
-                from src.services.storage.vector_store import VectorStore
-                self.vector_service = VectorStore()
+                from src.api.v1.vectordb import get_vector_store
+                self.vector_service = get_vector_store()
+                logger.info(f"VectorStore initialized with {self.vector_service.get_stats().get('vectors_count', 0)} vectors")
             except Exception as e:
                 logger.warning(f"Could not initialize VectorStore: {e}")
                 return []
 
         try:
-            # VectorStore uses sync search, wrap for compatibility
-            results = self.vector_service.search(
-                query_vector=None,  # Will be computed inside
-                query_text=query,
-                limit=top_k
+            # Use HybridVectorStore async search
+            raw_results = await self.vector_service.search(
+                query=query,
+                top_k=top_k,
+                mode=search_mode,
+                dense_weight=0.7
             )
-            return results if results else []
+
+            # Transform results to expected format (pmid at top level)
+            results = []
+            for r in raw_results or []:
+                metadata = r.get('metadata', {})
+                results.append({
+                    'pmid': metadata.get('pmid', ''),
+                    'title': metadata.get('title', ''),
+                    'text': r.get('text', ''),
+                    'abstract': r.get('text', ''),
+                    'score': r.get('score', 0),
+                    'dense_score': r.get('dense_score'),
+                    'sparse_score': r.get('sparse_score'),
+                })
+            return results
         except Exception as e:
             logger.error(f"Vector search error: {e}")
             return []
