@@ -168,7 +168,7 @@ export default function PipelineAnimation() {
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'ko-KR'
     utterance.rate = 1.0  // 정상 속도
-    utterance.pitch = 1.3  // 높은 피치 (더 여성스러운 톤)
+    utterance.pitch = 1.3  // 높은 피치 (여성스러운 톤)
     utterance.volume = 1.0
 
     // 여성 한국어 음성 찾기 (우선순위: Yuna > Sora > 여성 > 한국어)

@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Send, Loader2, BookOpen, RefreshCw, Database, Search, ExternalLink, FileText, ChevronUp, ChevronDown, Brain } from 'lucide-react'
+import { Send, Loader2, BookOpen, RefreshCw, Database, Search, ExternalLink, FileText, ChevronUp, ChevronDown, Brain, Volume2, VolumeX, Square } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { chatApi } from '@/services/api'
@@ -20,6 +20,8 @@ export default function ChatPage() {
   const [useVectordb, setUseVectordb] = useState(true)
   const [useMemory, setUseMemory] = useState(true)
   const [searchMode, setSearchMode] = useState<'hybrid' | 'dense' | 'sparse'>('hybrid')
+  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const {
     messages,
@@ -29,6 +31,62 @@ export default function ChatPage() {
     setLoading,
     clearMessages,
   } = useChatStore()
+
+  // 음성 합성 함수
+  const speak = useCallback((text: string, messageId: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return
+
+    // 이전 음성 중지
+    window.speechSynthesis.cancel()
+
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'ko-KR'
+    utterance.rate = 1.0
+    utterance.pitch = 1.3  // 여성스러운 톤
+    utterance.volume = 1.0
+
+    // 여성 한국어 음성 찾기
+    const voices = window.speechSynthesis.getVoices()
+    const femaleKoreanVoice = voices.find(voice =>
+      voice.lang.includes('ko') &&
+      (voice.name.toLowerCase().includes('female') ||
+       voice.name.toLowerCase().includes('yuna') ||
+       voice.name.toLowerCase().includes('sora') ||
+       voice.name.includes('여성') ||
+       voice.name.includes('유나') ||
+       voice.name.includes('소라'))
+    ) || voices.find(voice =>
+      voice.lang.includes('ko') &&
+      !voice.name.toLowerCase().includes('male')
+    ) || voices.find(voice => voice.lang.includes('ko'))
+
+    if (femaleKoreanVoice) {
+      utterance.voice = femaleKoreanVoice
+    }
+
+    utterance.onstart = () => setSpeakingMessageId(messageId)
+    utterance.onend = () => setSpeakingMessageId(null)
+    utterance.onerror = () => setSpeakingMessageId(null)
+
+    window.speechSynthesis.speak(utterance)
+  }, [])
+
+  // 음성 중지 함수
+  const stopSpeaking = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+      setSpeakingMessageId(null)
+    }
+  }, [])
+
+  // 컴포넌트 언마운트 시 음성 중지
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -198,6 +256,23 @@ export default function ChatPage() {
               대화 기억
             </span>
           </label>
+
+          <div className="w-px h-5 bg-slate-300 hidden sm:block" />
+
+          <button
+            onClick={() => {
+              if (voiceEnabled) stopSpeaking()
+              setVoiceEnabled(!voiceEnabled)
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+              voiceEnabled
+                ? 'bg-green-100 text-green-600 border border-green-300'
+                : 'bg-slate-100 text-slate-500 border border-slate-200'
+            } ${speakingMessageId ? 'animate-pulse' : ''}`}
+          >
+            {voiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            <span className="text-sm font-medium">음성 읽기</span>
+          </button>
         </div>
       </div>
 
@@ -231,7 +306,14 @@ export default function ChatPage() {
         )}
 
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            voiceEnabled={voiceEnabled}
+            isSpeaking={speakingMessageId === message.id}
+            onSpeak={() => speak(message.content, message.id)}
+            onStop={stopSpeaking}
+          />
         ))}
 
         {isLoading && (
@@ -336,7 +418,15 @@ export default function ChatPage() {
   )
 }
 
-function MessageBubble({ message }: { message: ExtendedChatMessage }) {
+interface MessageBubbleProps {
+  message: ExtendedChatMessage
+  voiceEnabled: boolean
+  isSpeaking: boolean
+  onSpeak: () => void
+  onStop: () => void
+}
+
+function MessageBubble({ message, voiceEnabled, isSpeaking, onSpeak, onStop }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   // Simple markdown-like rendering for AI responses
@@ -405,6 +495,32 @@ function MessageBubble({ message }: { message: ExtendedChatMessage }) {
       >
         {/* Main content */}
         {renderContent(message.content)}
+
+        {/* Voice button for assistant messages */}
+        {!isUser && voiceEnabled && (
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={isSpeaking ? onStop : onSpeak}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                isSpeaking
+                  ? 'bg-red-100 text-red-600 border border-red-300 animate-pulse'
+                  : 'bg-green-100 text-green-600 border border-green-300 hover:bg-green-200'
+              }`}
+            >
+              {isSpeaking ? (
+                <>
+                  <Square size={14} />
+                  정지
+                </>
+              ) : (
+                <>
+                  <Volume2 size={14} />
+                  읽어주기
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* VectorDB & Memory indicator */}
         {!isUser && (message.vectordbUsed || message.memoryUsed) && (
