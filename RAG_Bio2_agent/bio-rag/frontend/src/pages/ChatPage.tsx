@@ -71,25 +71,26 @@ export default function ChatPage() {
     const utterance = new SpeechSynthesisUtterance(finalAnswer)
     utterance.lang = 'ko-KR'
     utterance.rate = 1.3  // 빠른 속도
-    utterance.pitch = 1.2  // 높은 피치 (어린 남자 목소리)
+    utterance.pitch = 1.3  // 높은 피치 (여성 목소리)
     utterance.volume = 1.0
 
-    // 남성 한국어 음성 찾기
+    // 여성 한국어 음성 찾기
     const voices = window.speechSynthesis.getVoices()
-    const maleKoreanVoice = voices.find(voice =>
+    const femaleKoreanVoice = voices.find(voice =>
       voice.lang.includes('ko') &&
-      (voice.name.toLowerCase().includes('male') ||
-       voice.name.includes('남성') ||
-       voice.name.toLowerCase().includes('junwoo') ||
-       voice.name.includes('준우'))
+      (voice.name.toLowerCase().includes('female') ||
+       voice.name.toLowerCase().includes('yuna') ||
+       voice.name.toLowerCase().includes('sora') ||
+       voice.name.includes('여성') ||
+       voice.name.includes('유나') ||
+       voice.name.includes('소라'))
     ) || voices.find(voice =>
       voice.lang.includes('ko') &&
-      !voice.name.toLowerCase().includes('female') &&
-      !voice.name.includes('여성')
+      !voice.name.toLowerCase().includes('male')
     ) || voices.find(voice => voice.lang.includes('ko'))
 
-    if (maleKoreanVoice) {
-      utterance.voice = maleKoreanVoice
+    if (femaleKoreanVoice) {
+      utterance.voice = femaleKoreanVoice
     }
 
     utterance.onstart = () => setSpeakingMessageId(messageId)
