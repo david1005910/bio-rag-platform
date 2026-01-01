@@ -10,6 +10,7 @@ from src.core.security import get_current_user_id, get_current_user_id_optional
 from src.data import sample_papers
 from src.services.pubmed import get_pubmed_service
 from src.services.ai_chat import get_ai_service, ChatSource
+from src.services.chat_memory import get_memory_service, format_memory_context
 from src.core.config import settings
 from src.api.v1.vectordb import get_vector_store
 
@@ -113,6 +114,7 @@ class ChatQueryRequest(BaseModel):
     use_vectordb: bool = True  # Use VectorDB hybrid search first
     search_mode: str = "hybrid"  # "hybrid", "dense", or "sparse" for VectorDB
     dense_weight: float = 0.7  # Weight for dense search in hybrid mode
+    use_memory: bool = True  # Use past Q&A memory for context
 
 
 class SourceInfo(BaseModel):
@@ -135,6 +137,8 @@ class ChatQueryResponse(BaseModel):
     session_id: str
     vectordb_used: bool = False
     search_mode: Optional[str] = None  # "hybrid", "dense", "sparse", or None
+    memory_used: bool = False  # Whether past Q&A memory was used
+    similar_questions_found: int = 0  # Number of similar past questions found
 
 
 class ChatSession(BaseModel):
@@ -305,13 +309,55 @@ async def chat_query(
                 relevance=paper["relevance_score"]
             ))
 
-    # Step 4: Generate AI response
+    # Step 4: Search for similar past conversations (Memory)
+    memory_used = False
+    similar_questions_found = 0
+    memory_context = ""
+
+    if request.use_memory:
+        try:
+            memory_service = get_memory_service()
+
+            # Check for exact match first
+            exact_match = memory_service.find_exact_match(request.question)
+            if exact_match:
+                logger.info(f"Exact match found for query: '{request.question[:50]}...'")
+                similar_questions_found = 1
+                memory_used = True
+
+            # Search for similar past conversations
+            similar_conversations = memory_service.search_similar_conversations(
+                query=request.question,
+                limit=3,
+                min_relevance=0.1
+            )
+
+            if similar_conversations:
+                similar_questions_found = len(similar_conversations)
+                memory_used = True
+                memory_context = format_memory_context(similar_conversations)
+                logger.info(f"Found {similar_questions_found} similar past conversations")
+
+        except Exception as e:
+            logger.warning(f"Memory search failed: {e}")
+            memory_used = False
+
+    # Step 5: Generate AI response
     if request.use_ai and papers_for_context:
         try:
             ai_service = get_ai_service()
+
+            # Build conversation history with memory context
+            conversation_history = None
+            if memory_context:
+                conversation_history = [
+                    {"role": "system", "content": memory_context}
+                ]
+
             ai_response = await ai_service.chat_with_context(
                 question=request.question,
-                sources=papers_for_context
+                sources=papers_for_context,
+                conversation_history=conversation_history
             )
 
             answer = ai_response.answer
@@ -321,7 +367,24 @@ async def chat_query(
             if vectordb_used and actual_search_mode == "hybrid":
                 confidence = min(confidence + 0.1, 1.0)
 
+            # Boost confidence if memory was used
+            if memory_used:
+                confidence = min(confidence + 0.05, 1.0)
+
             logger.info(f"AI response generated, confidence: {confidence}")
+
+            # Step 6: Save conversation to memory
+            if request.use_memory:
+                try:
+                    memory_service = get_memory_service()
+                    memory_service.save_conversation(
+                        query=request.question,
+                        answer=answer,
+                        sources_used=ai_response.sources_used
+                    )
+                    logger.info("Conversation saved to memory")
+                except Exception as e:
+                    logger.warning(f"Failed to save conversation to memory: {e}")
 
         except Exception as e:
             logger.error(f"AI service error: {e}")
@@ -340,7 +403,9 @@ async def chat_query(
         processing_time_ms=processing_time,
         session_id=request.session_id or str(uuid.uuid4()),
         vectordb_used=vectordb_used,
-        search_mode=actual_search_mode
+        search_mode=actual_search_mode,
+        memory_used=memory_used,
+        similar_questions_found=similar_questions_found
     )
 
 
@@ -455,3 +520,94 @@ async def delete_session(
     # TODO: Delete from database
 
     return {"message": f"Session {session_id} deleted"}
+
+
+# ============== Memory Endpoints ==============
+
+class MemoryStatsResponse(BaseModel):
+    """Memory statistics response"""
+    total_conversations: int
+    database_path: str
+
+
+class RecentConversationResponse(BaseModel):
+    """Recent conversation item"""
+    id: int
+    query: str
+    answer_preview: str
+    created_at: str
+
+
+class RecentConversationsListResponse(BaseModel):
+    """List of recent conversations"""
+    conversations: List[RecentConversationResponse]
+
+
+@router.get("/memory/stats", response_model=MemoryStatsResponse)
+async def get_memory_stats():
+    """
+    Get chat memory statistics
+
+    - Returns total number of stored conversations
+    - Returns database path
+    """
+    try:
+        memory_service = get_memory_service()
+        count = memory_service.get_conversation_count()
+
+        return MemoryStatsResponse(
+            total_conversations=count,
+            database_path=str(memory_service.db_path)
+        )
+    except Exception as e:
+        logger.error(f"Failed to get memory stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/memory/recent", response_model=RecentConversationsListResponse)
+async def get_recent_conversations(limit: int = 10):
+    """
+    Get recent conversations from memory
+
+    - Returns list of recent Q&A pairs
+    - Answer is truncated for preview
+    """
+    try:
+        memory_service = get_memory_service()
+        conversations = memory_service.get_recent_conversations(limit=limit)
+
+        return RecentConversationsListResponse(
+            conversations=[
+                RecentConversationResponse(
+                    id=conv.id,
+                    query=conv.query,
+                    answer_preview=conv.answer[:200] + "..." if len(conv.answer) > 200 else conv.answer,
+                    created_at=conv.created_at
+                )
+                for conv in conversations
+            ]
+        )
+    except Exception as e:
+        logger.error(f"Failed to get recent conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/memory/clear")
+async def clear_old_memory(days: int = 30):
+    """
+    Clear old conversations from memory
+
+    - Removes conversations older than specified days
+    - Returns number of deleted conversations
+    """
+    try:
+        memory_service = get_memory_service()
+        deleted_count = memory_service.clear_old_conversations(days=days)
+
+        return {
+            "message": f"Cleared {deleted_count} conversations older than {days} days",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        logger.error(f"Failed to clear memory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
