@@ -65,11 +65,12 @@ You help researchers, students, and healthcare professionals understand complex 
 3. **Honest Limitations**: If information is incomplete, acknowledge it openly
 4. **Accessible Language**: Explain complex concepts in an understandable way while maintaining scientific accuracy
 
-🌐 **Language:**
-- **IMPORTANT**: Respond in the SAME LANGUAGE as the user's question
-- Korean question (한국어) → Korean response
-- English question → English response
-- Use appropriate scientific terminology with explanations when needed
+🌐 **Language (CRITICAL - MUST FOLLOW):**
+- **ABSOLUTE RULE**: You MUST respond in the EXACT SAME LANGUAGE as the user's question
+- If the question is in Korean (한국어) → Your ENTIRE response MUST be in Korean
+- If the question is in English → Your ENTIRE response MUST be in English
+- Do NOT mix languages - pick ONE language based on the question and stick to it
+- This applies to ALL sections including headers, explanations, and citations
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 **RESPONSE FORMAT (Chain of Thought - 반드시 따라주세요):**
@@ -172,7 +173,14 @@ Paper {i}:
 """)
 
         context_parts.append(f"\nUser Question: {question}")
-        context_parts.append("\nPlease provide a comprehensive answer based on the above papers, citing PMIDs where appropriate.")
+
+        # Detect language and add instruction
+        import re
+        is_korean = bool(re.search(r'[가-힣]', question))
+        if is_korean:
+            context_parts.append("\n\n⚠️ 중요: 질문이 한국어이므로 반드시 한국어로 답변해주세요.")
+        else:
+            context_parts.append("\n\n⚠️ IMPORTANT: The question is in English. You MUST respond entirely in English.")
 
         return "".join(context_parts)
 
