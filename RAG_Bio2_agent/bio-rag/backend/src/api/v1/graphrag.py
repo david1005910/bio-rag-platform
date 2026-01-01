@@ -346,3 +346,67 @@ async def setup_graph_schema(
     except Exception as e:
         logger.error(f"Schema setup error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class VisualizationRequest(BaseModel):
+    """Request for graph visualization data"""
+    query: Optional[str] = None
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class GraphNode(BaseModel):
+    """Node in the graph visualization"""
+    id: str
+    type: str  # 'paper', 'author', 'keyword'
+    label: str
+    pmid: Optional[str] = None
+    title: Optional[str] = None
+    name: Optional[str] = None
+    term: Optional[str] = None
+    journal: Optional[str] = None
+
+
+class GraphEdge(BaseModel):
+    """Edge in the graph visualization"""
+    source: str
+    target: str
+    type: str  # 'cites', 'authored', 'has_keyword'
+    label: str
+
+
+class VisualizationResponse(BaseModel):
+    """Graph visualization data response"""
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    status: str
+    node_count: int = 0
+    edge_count: int = 0
+    error: Optional[str] = None
+
+
+@router.post("/visualization", response_model=VisualizationResponse)
+async def get_graph_visualization(
+    request: VisualizationRequest,
+    service: GraphDBService = Depends(get_graph_db)
+):
+    """
+    Get graph visualization data (nodes and edges)
+
+    Returns data formatted for 3D knowledge graph visualization.
+    Includes papers, authors, and keywords with their relationships.
+    """
+    try:
+        data = service.get_visualization_data(
+            query=request.query,
+            limit=request.limit
+        )
+        return VisualizationResponse(**data)
+
+    except Exception as e:
+        logger.error(f"Visualization error: {e}")
+        return VisualizationResponse(
+            nodes=[],
+            edges=[],
+            status="error",
+            error=str(e)
+        )

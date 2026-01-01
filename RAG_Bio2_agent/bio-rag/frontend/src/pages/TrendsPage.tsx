@@ -4,7 +4,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { TrendingUp, BarChart3, Flame, Loader2, Sparkles, Search, ArrowRight, Lightbulb, Target, Compass, Workflow, Boxes } from 'lucide-react'
 import { trendsApi } from '@/services/api'
 import PipelineAnimation from '@/components/PipelineAnimation'
-import VectorSpaceAnimation from '@/components/VectorSpaceAnimation'
+import KnowledgeGraphAnimation from '@/components/KnowledgeGraphAnimation'
 import {
   BarChart,
   Bar,
@@ -23,7 +23,7 @@ import {
 
 const COLORS = ['#06b6d4', '#8b5cf6', '#f472b6', '#fb923c', '#22c55e', '#eab308', '#f43f5e', '#6366f1', '#14b8a6', '#a855f7']
 
-type ViewMode = 'trends' | 'pipeline' | 'vector'
+type ViewMode = 'trends' | 'pipeline' | 'graph'
 
 export default function TrendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -109,8 +109,8 @@ export default function TrendsPage() {
             <p className="liquid-text-muted mt-1">
               {viewMode === 'pipeline'
                 ? 'RAG 파이프라인의 작동 과정을 단계별로 확인하세요'
-                : viewMode === 'vector'
-                  ? '단어 임베딩이 벡터 공간에서 클러스터링되는 과정을 확인하세요'
+                : viewMode === 'graph'
+                  ? 'Neo4j 지식 그래프의 논문, 저자, 키워드 관계를 탐색하세요'
                   : queryFromUrl
                     ? `"${queryFromUrl}" 관련 연구 트렌드 분석`
                     : '바이오메디컬 연구의 최신 트렌드를 확인하세요'
@@ -143,15 +143,15 @@ export default function TrendsPage() {
               RAG 파이프라인
             </button>
             <button
-              onClick={() => setViewMode('vector')}
+              onClick={() => setViewMode('graph')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                viewMode === 'vector'
-                  ? 'bg-green-100 text-green-700 border border-green-300'
+                viewMode === 'graph'
+                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
                   : 'text-slate-600 hover:text-slate-800'
               }`}
             >
               <Boxes size={18} />
-              벡터 스페이스
+              지식 그래프
             </button>
           </div>
         </div>
@@ -162,9 +162,9 @@ export default function TrendsPage() {
         <PipelineAnimation />
       )}
 
-      {/* Vector Space Animation View */}
-      {viewMode === 'vector' && (
-        <VectorSpaceAnimation />
+      {/* Knowledge Graph View */}
+      {viewMode === 'graph' && (
+        <KnowledgeGraphAnimation />
       )}
 
       {/* Trends View */}

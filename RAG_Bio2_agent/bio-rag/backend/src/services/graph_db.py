@@ -516,6 +516,183 @@ class GraphDBService:
 
             return results
 
+    # ==================== Visualization ====================
+
+    def get_visualization_data(
+        self,
+        query: str = None,
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Get graph data for visualization (nodes and edges)
+
+        Returns nodes (papers, authors, keywords) and edges (citations, authorships, keyword links)
+        in a format suitable for frontend 3D visualization.
+        """
+        driver = self._get_driver()
+        if not driver:
+            return {'nodes': [], 'edges': [], 'status': 'disconnected'}
+
+        # If query provided, search for related papers first
+        if query:
+            visualization_query = """
+            // Find papers matching the query
+            MATCH (p:Paper)
+            WHERE p.title =~ $pattern OR p.abstract =~ $pattern
+            WITH p LIMIT 10
+
+            // Get related nodes
+            OPTIONAL MATCH (p)-[:CITES]->(cited:Paper)
+            OPTIONAL MATCH (citing:Paper)-[:CITES]->(p)
+            OPTIONAL MATCH (p)<-[:AUTHORED]-(a:Author)
+            OPTIONAL MATCH (p)-[:HAS_KEYWORD]->(k:Keyword)
+
+            WITH collect(DISTINCT p) + collect(DISTINCT cited) + collect(DISTINCT citing) AS papers,
+                 collect(DISTINCT a) AS authors,
+                 collect(DISTINCT k) AS keywords
+
+            UNWIND papers AS paper
+            WITH DISTINCT paper, authors, keywords
+            WHERE paper IS NOT NULL
+
+            // Collect all nodes
+            WITH collect({
+                id: 'paper_' + paper.pmid,
+                type: 'paper',
+                label: CASE WHEN size(paper.title) > 40 THEN substring(paper.title, 0, 40) + '...' ELSE paper.title END,
+                pmid: paper.pmid,
+                title: paper.title,
+                journal: paper.journal
+            }) AS paperNodes, authors, keywords
+
+            // Add author nodes
+            UNWIND authors AS author
+            WITH paperNodes, collect(DISTINCT {
+                id: 'author_' + author.name,
+                type: 'author',
+                label: author.name,
+                name: author.name
+            }) AS authorNodes, keywords
+
+            // Add keyword nodes
+            UNWIND keywords AS keyword
+            WITH paperNodes, authorNodes, collect(DISTINCT {
+                id: 'keyword_' + keyword.term,
+                type: 'keyword',
+                label: keyword.term,
+                term: keyword.term
+            }) AS keywordNodes
+
+            RETURN paperNodes + authorNodes + keywordNodes AS nodes
+            """
+            pattern = f"(?i).*{query}.*"
+        else:
+            # Get full graph overview (limited)
+            visualization_query = """
+            // Get papers
+            MATCH (p:Paper)
+            WITH p LIMIT $limit
+
+            WITH collect({
+                id: 'paper_' + p.pmid,
+                type: 'paper',
+                label: CASE WHEN size(p.title) > 40 THEN substring(p.title, 0, 40) + '...' ELSE p.title END,
+                pmid: p.pmid,
+                title: p.title,
+                journal: p.journal
+            }) AS paperNodes
+
+            // Get authors (limited)
+            MATCH (a:Author)
+            WITH paperNodes, a LIMIT 30
+            WITH paperNodes, collect({
+                id: 'author_' + a.name,
+                type: 'author',
+                label: a.name,
+                name: a.name
+            }) AS authorNodes
+
+            // Get keywords (limited)
+            MATCH (k:Keyword)
+            WITH paperNodes, authorNodes, k LIMIT 30
+            WITH paperNodes, authorNodes, collect({
+                id: 'keyword_' + k.term,
+                type: 'keyword',
+                label: k.term,
+                term: k.term
+            }) AS keywordNodes
+
+            RETURN paperNodes + authorNodes + keywordNodes AS nodes
+            """
+            pattern = None
+
+        # Get edges separately
+        edges_query = """
+        // Citation edges
+        MATCH (p1:Paper)-[c:CITES]->(p2:Paper)
+        WITH collect({
+            source: 'paper_' + p1.pmid,
+            target: 'paper_' + p2.pmid,
+            type: 'cites',
+            label: 'CITES'
+        }) AS citationEdges
+
+        // Authorship edges
+        MATCH (a:Author)-[au:AUTHORED]->(p:Paper)
+        WITH citationEdges, collect({
+            source: 'author_' + a.name,
+            target: 'paper_' + p.pmid,
+            type: 'authored',
+            label: 'AUTHORED'
+        }) AS authorshipEdges
+
+        // Keyword edges
+        MATCH (p:Paper)-[h:HAS_KEYWORD]->(k:Keyword)
+        WITH citationEdges, authorshipEdges, collect({
+            source: 'paper_' + p.pmid,
+            target: 'keyword_' + k.term,
+            type: 'has_keyword',
+            label: 'HAS_KEYWORD'
+        }) AS keywordEdges
+
+        RETURN citationEdges + authorshipEdges + keywordEdges AS edges
+        """
+
+        with driver.session() as session:
+            try:
+                # Get nodes
+                if query:
+                    node_result = session.run(visualization_query, pattern=pattern)
+                else:
+                    node_result = session.run(visualization_query, limit=limit)
+
+                node_record = node_result.single()
+                nodes = node_record['nodes'] if node_record else []
+
+                # Get edges
+                edge_result = session.run(edges_query)
+                edge_record = edge_result.single()
+                edges = edge_record['edges'] if edge_record else []
+
+                # Filter edges to only include nodes we have
+                node_ids = {n['id'] for n in nodes}
+                filtered_edges = [
+                    e for e in edges
+                    if e['source'] in node_ids and e['target'] in node_ids
+                ]
+
+                return {
+                    'nodes': nodes,
+                    'edges': filtered_edges,
+                    'status': 'connected',
+                    'node_count': len(nodes),
+                    'edge_count': len(filtered_edges)
+                }
+
+            except Exception as e:
+                logger.error(f"Visualization query error: {e}")
+                return {'nodes': [], 'edges': [], 'status': 'error', 'error': str(e)}
+
     # ==================== Statistics ====================
 
     def get_stats(self) -> Dict[str, Any]:

@@ -478,3 +478,79 @@ export const vectordbApi = {
     await api.delete('/vectordb/clear')
   },
 }
+
+// ============== GraphRAG API ==============
+
+export interface GraphNode {
+  id: string
+  type: 'paper' | 'author' | 'keyword'
+  label: string
+  pmid?: string
+  title?: string
+  name?: string
+  term?: string
+  journal?: string
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  type: 'cites' | 'authored' | 'has_keyword'
+  label: string
+}
+
+export interface GraphVisualizationResponse {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  status: string
+  node_count: number
+  edge_count: number
+  error?: string
+}
+
+export interface GraphStats {
+  status: string
+  papers: number
+  authors: number
+  keywords: number
+  citations: number
+  authorships: number
+  keyword_links: number
+}
+
+export const graphApi = {
+  getVisualization: async (
+    query?: string,
+    limit: number = 50
+  ): Promise<GraphVisualizationResponse> => {
+    const response = await api.post('/graphrag/visualization', {
+      query,
+      limit,
+    })
+    return response.data
+  },
+
+  getStats: async (): Promise<GraphStats> => {
+    const response = await api.get('/graphrag/stats')
+    return response.data
+  },
+
+  query: async (
+    question: string,
+    options?: {
+      topK?: number
+      useGraph?: boolean
+      graphDepth?: number
+      searchMode?: 'hybrid' | 'dense' | 'sparse'
+    }
+  ): Promise<unknown> => {
+    const response = await api.post('/graphrag/query', {
+      question,
+      top_k: options?.topK ?? 10,
+      use_graph: options?.useGraph ?? true,
+      graph_depth: options?.graphDepth ?? 2,
+      search_mode: options?.searchMode ?? 'hybrid',
+    })
+    return response.data
+  },
+}
