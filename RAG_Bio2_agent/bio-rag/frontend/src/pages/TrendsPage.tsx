@@ -28,8 +28,9 @@ type ViewMode = 'trends' | 'pipeline' | 'vector'
 export default function TrendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryFromUrl = searchParams.get('q') || ''
+  const viewFromUrl = searchParams.get('view') as ViewMode | null
   const [searchInput, setSearchInput] = useState(queryFromUrl)
-  const [viewMode, setViewMode] = useState<ViewMode>('trends')
+  const [viewMode, setViewMode] = useState<ViewMode>(viewFromUrl || 'trends')
 
   // AI Trend Analysis
   const { data: trendAnalysis, isLoading: analysisLoading, error: analysisError } = useQuery({
