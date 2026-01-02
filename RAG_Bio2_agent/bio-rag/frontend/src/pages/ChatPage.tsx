@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Send, Loader2, BookOpen, RefreshCw, Database, Search, ExternalLink, FileText, ChevronUp, ChevronDown, Brain, Volume2, VolumeX, Square } from 'lucide-react'
+import { Send, BookOpen, RefreshCw, Database, Search, ExternalLink, FileText, ChevronUp, ChevronDown, Brain, Volume2, VolumeX, Square, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { chatApi } from '@/services/api'
@@ -16,6 +16,15 @@ interface ExtendedChatMessage extends ChatMessage {
   similarQuestionsFound?: number
 }
 
+// Progress bar stages for loading animation
+const LOADING_STAGES = [
+  { progress: 15, text: '문서 검색 중...', icon: 'search' },
+  { progress: 35, text: '관련 논문 분석 중...', icon: 'analyze' },
+  { progress: 55, text: 'AI 모델 처리 중...', icon: 'ai' },
+  { progress: 75, text: '답변 생성 중...', icon: 'generate' },
+  { progress: 90, text: '최종 검토 중...', icon: 'review' },
+]
+
 export default function ChatPage() {
   const [input, setInput] = useState('')
   const [useVectordb, setUseVectordb] = useState(true)
@@ -23,6 +32,8 @@ export default function ChatPage() {
   const [searchMode, setSearchMode] = useState<'hybrid' | 'dense' | 'sparse'>('hybrid')
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
+  const [loadingStage, setLoadingStage] = useState(0)
+  const [elapsedTime, setElapsedTime] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const {
     messages,
@@ -117,6 +128,41 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Progress bar animation - cycle through stages while loading
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingStage(0)
+      return
+    }
+
+    const interval = setInterval(() => {
+      setLoadingStage((prev) => {
+        if (prev >= LOADING_STAGES.length - 1) {
+          return prev // Stay at last stage
+        }
+        return prev + 1
+      })
+    }, 2000) // Advance stage every 2 seconds
+
+    return () => clearInterval(interval)
+  }, [isLoading])
+
+  // Elapsed time counter
+  useEffect(() => {
+    if (!isLoading) {
+      return
+    }
+
+    setElapsedTime(0)
+    const startTime = Date.now()
+
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime) / 100) / 10)
+    }, 100) // Update every 100ms for smooth display
+
+    return () => clearInterval(interval)
+  }, [isLoading])
 
   const queryMutation = useMutation({
     mutationFn: (question: string) =>
@@ -352,11 +398,69 @@ export default function ChatPage() {
         })}
 
         {isLoading && (
-          <div className="flex justify-start">
-            <div className="glossy-panel-sm px-6 py-4">
-              <div className="flex items-center gap-2 liquid-text-muted">
-                <Loader2 className="animate-spin" size={18} />
-                답변 생성 중...
+          <div className="flex justify-start w-full">
+            <div className="glossy-panel-sm px-6 py-5 w-full max-w-2xl">
+              {/* Header with animated icon and timer */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Sparkles className="text-purple-500 animate-pulse" size={24} />
+                    <div className="absolute inset-0 bg-purple-400/30 rounded-full blur-md animate-ping" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-700">AI가 답변을 준비하고 있습니다</p>
+                    <p className="text-sm text-slate-500">{LOADING_STAGES[loadingStage]?.text || '처리 중...'}</p>
+                  </div>
+                </div>
+                {/* Elapsed time display */}
+                <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-mono font-medium text-slate-600">
+                    {elapsedTime.toFixed(1)}초
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="relative h-3 bg-slate-200/80 rounded-full overflow-hidden mb-3">
+                {/* Animated gradient background */}
+                <div
+                  className="absolute inset-0 bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 rounded-full transition-all duration-700 ease-out"
+                  style={{
+                    width: `${LOADING_STAGES[loadingStage]?.progress || 10}%`,
+                  }}
+                >
+                  {/* Shimmer effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                </div>
+                {/* Glowing effect at the end */}
+                <div
+                  className="absolute top-0 h-full w-4 bg-white/50 blur-sm rounded-full transition-all duration-700"
+                  style={{ left: `calc(${LOADING_STAGES[loadingStage]?.progress || 10}% - 8px)` }}
+                />
+              </div>
+
+              {/* Stage indicators */}
+              <div className="flex justify-between text-xs text-slate-400">
+                {LOADING_STAGES.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-1 transition-colors duration-300 ${
+                      idx <= loadingStage ? 'text-purple-600' : 'text-slate-300'
+                    }`}
+                  >
+                    <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                      idx < loadingStage
+                        ? 'bg-purple-500'
+                        : idx === loadingStage
+                          ? 'bg-purple-500 animate-pulse scale-125'
+                          : 'bg-slate-300'
+                    }`} />
+                    {idx === 0 && <span className="hidden sm:inline">검색</span>}
+                    {idx === 2 && <span className="hidden sm:inline">AI</span>}
+                    {idx === 4 && <span className="hidden sm:inline">완료</span>}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
