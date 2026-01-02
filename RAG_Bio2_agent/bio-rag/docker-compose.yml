@@ -97,7 +97,13 @@ services:
       dockerfile: Dockerfile
     container_name: bio-rag-celery-worker
     restart: unless-stopped
-    command: celery -A src.core.celery_app worker --loglevel=info
+    command: celery -A src.tasks.celery:celery_app worker --loglevel=info
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A src.tasks.celery:celery_app inspect ping || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
     environment:
       - APP_NAME=bio-rag
       - APP_ENV=${APP_ENV:-production}
