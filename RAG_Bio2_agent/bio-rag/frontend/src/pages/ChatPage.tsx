@@ -56,7 +56,7 @@ export default function ChatPage() {
     for (const pattern of patterns) {
       const match = text.match(pattern)
       if (match && match[0].length > 50) {
-        let result = match[0]
+        const result = match[0]
           // 제목 제거 (4. 최종 답변, ## ✨ 4. 최종 답변 등)
           .replace(/^(?:##\s*)?(?:✨\s*)?4\.\s*(?:최종\s*)?(?:답변|Final\s*Answer)[^\n]*/i, '')
           // 인용된 논문 섹션 제거

@@ -218,6 +218,7 @@ export default function PipelineAnimation() {
     } else if (!voiceEnabled) {
       stopSpeaking()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceEnabled])
 
   // 컴포넌트 언마운트 시 음성 중지
