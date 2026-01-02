@@ -175,7 +175,7 @@ export default function ForceGraph3DSmall() {
         graphRef.current = null
       }
     }
-  }, [graphData])
+  }, [graphData, graphSize])
 
   if (loading) {
     return (
@@ -274,8 +274,9 @@ export default function ForceGraph3DSmall() {
       </div>
 
       <div
+        key={graphSize}
         ref={containerRef}
-        className="w-full rounded-lg overflow-hidden transition-all duration-300"
+        className="w-full rounded-lg overflow-hidden"
         style={{ height: SIZE_CONFIG[graphSize].height }}
       />
 
