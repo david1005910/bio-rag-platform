@@ -383,8 +383,10 @@ export default function KnowledgeGraphAnimation() {
       setEdges(edges3D)
       setStats(statsData)
 
-      if (nodes3D.length === 0) {
+      if (nodes3D.length === 0 && !query) {
         setError('그래프 데이터가 없습니다. GraphDB에 데이터를 먼저 인덱싱하세요.')
+      } else if (nodes3D.length === 0 && query) {
+        setError(`"${query}" 검색 결과가 없습니다. 다른 키워드로 검색해보세요.`)
       }
     } catch (err) {
       console.error('Graph data fetch error:', err)

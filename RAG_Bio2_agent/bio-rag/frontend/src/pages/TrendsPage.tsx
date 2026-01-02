@@ -5,6 +5,7 @@ import { TrendingUp, BarChart3, Flame, Loader2, Sparkles, Search, ArrowRight, Li
 import { trendsApi } from '@/services/api'
 import PipelineAnimation from '@/components/PipelineAnimation'
 import KnowledgeGraphAnimation from '@/components/KnowledgeGraphAnimation'
+import ForceGraph3DSmall from '@/components/ForceGraph3DSmall'
 import {
   BarChart,
   Bar,
@@ -164,7 +165,14 @@ export default function TrendsPage() {
 
       {/* Knowledge Graph View */}
       {viewMode === 'graph' && (
-        <KnowledgeGraphAnimation />
+        <>
+          <KnowledgeGraphAnimation />
+
+          {/* 3D Force Graph Section */}
+          <div className="mt-6">
+            <ForceGraph3DSmall />
+          </div>
+        </>
       )}
 
       {/* Trends View */}

@@ -518,6 +518,72 @@ class GraphDBService:
 
     # ==================== Visualization ====================
 
+    # Korean to English medical term mapping
+    KOREAN_MEDICAL_TERMS = {
+        # Cancers
+        '췌장암': 'pancreatic cancer',
+        '폐암': 'lung cancer',
+        '유방암': 'breast cancer',
+        '대장암': 'colorectal cancer',
+        '간암': 'liver cancer',
+        '위암': 'gastric cancer',
+        '전립선암': 'prostate cancer',
+        '난소암': 'ovarian cancer',
+        '백혈병': 'leukemia',
+        '림프종': 'lymphoma',
+        '암': 'cancer',
+        '종양': 'tumor',
+        # Treatments
+        '면역요법': 'immunotherapy',
+        '항암제': 'chemotherapy',
+        '방사선치료': 'radiation therapy',
+        '유전자치료': 'gene therapy',
+        '표적치료': 'targeted therapy',
+        '세포치료': 'cell therapy',
+        # Technologies
+        '크리스퍼': 'CRISPR',
+        '유전자편집': 'gene editing',
+        '유전자가위': 'CRISPR',
+        'mRNA백신': 'mRNA vaccine',
+        '단백질': 'protein',
+        '항체': 'antibody',
+        '바이오마커': 'biomarker',
+        # Diseases
+        '당뇨병': 'diabetes',
+        '알츠하이머': 'Alzheimer',
+        '파킨슨': 'Parkinson',
+        '심혈관': 'cardiovascular',
+        '자가면역': 'autoimmune',
+        '염증': 'inflammation',
+        # General
+        '줄기세포': 'stem cell',
+        '임상시험': 'clinical trial',
+        '바이러스': 'virus',
+        '박테리아': 'bacteria',
+        '감염': 'infection',
+        '코로나': 'COVID',
+        '백신': 'vaccine',
+    }
+
+    def _translate_korean_query(self, query: str) -> str:
+        """Translate Korean medical terms to English for search"""
+        if not query:
+            return query
+
+        # Check if query contains Korean characters
+        import re
+        if not re.search('[가-힣]', query):
+            return query  # No Korean, return as-is
+
+        # Try to find matching Korean term
+        query_lower = query.lower().strip()
+        for korean, english in self.KOREAN_MEDICAL_TERMS.items():
+            if korean in query:
+                return english
+
+        # If no exact match, return original (will likely return no results)
+        return query
+
     def get_visualization_data(
         self,
         query: str = None,
@@ -532,6 +598,11 @@ class GraphDBService:
         driver = self._get_driver()
         if not driver:
             return {'nodes': [], 'edges': [], 'status': 'disconnected'}
+
+        # Translate Korean query to English if needed
+        if query:
+            query = self._translate_korean_query(query)
+            logger.info(f"Search query (after translation): {query}")
 
         # If query provided, search for related papers first
         if query:
