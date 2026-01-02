@@ -49,8 +49,9 @@ describe('searchStore', () => {
           abstract: 'Test abstract',
           authors: ['Author 1'],
           journal: 'Test Journal',
-          publication_date: '2024-01-01',
-          relevance_score: 0.95,
+          publicationDate: '2024-01-01',
+          relevanceScore: 0.95,
+          keywords: ['test', 'paper'],
         },
       ]
       const mockFilters = { yearFrom: 2020, yearTo: 2024 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { handleApiError, getErrorMessage, logError } from './errorHandler'
 import axios, { AxiosError } from 'axios'
 
