@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: bio-rag-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_NAME
+        value: bio-rag
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: PUBMED_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: QDRANT_HOST
+        sync: false
+      - key: QDRANT_PORT
+        value: "6333"
