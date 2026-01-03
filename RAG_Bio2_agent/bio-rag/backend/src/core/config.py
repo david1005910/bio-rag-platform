@@ -44,8 +44,15 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440  # 24 hours
 
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:5173"]
+    # CORS - can be set via environment variable as comma-separated list
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:5173",
+        "https://bio-rag.vercel.app",
+        "https://bio-rag-platform.vercel.app",
+    ]
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
