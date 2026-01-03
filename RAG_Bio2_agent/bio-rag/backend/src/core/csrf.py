@@ -87,8 +87,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 key=CSRF_COOKIE_NAME,
                 value=csrf_token,
                 httponly=False,  # Must be accessible to JavaScript
-                secure=False,  # Set to True in production with HTTPS
-                samesite="lax",
+                secure=True,  # Required for HTTPS in production
+                samesite="none",  # Required for cross-origin requests
                 max_age=3600 * 24,  # 24 hours
                 path="/",
             )
