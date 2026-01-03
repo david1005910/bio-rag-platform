@@ -1,14 +1,16 @@
 services:
   - type: web
     name: bio-rag-backend
-    runtime: docker
+    runtime: python
     rootDir: bio-rag/backend
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    buildCommand: pip install -r requirements-railway.txt
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
     region: oregon
     plan: free
     healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.7"
       - key: APP_NAME
         value: bio-rag
       - key: APP_ENV
