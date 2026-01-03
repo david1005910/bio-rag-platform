@@ -3,8 +3,8 @@ services:
     name: bio-rag-backend
     runtime: docker
     rootDir: bio-rag/backend
-    dockerfilePath: bio-rag/backend/Dockerfile
-    dockerContext: bio-rag/backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     region: oregon
     plan: free
     healthCheckPath: /health

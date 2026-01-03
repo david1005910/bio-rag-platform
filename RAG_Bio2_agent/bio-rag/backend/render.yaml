@@ -2,7 +2,6 @@ services:
   - type: web
     name: bio-rag-backend
     runtime: docker
-    rootDir: bio-rag/backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
     region: oregon
