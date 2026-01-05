@@ -3,7 +3,6 @@
 import logging
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
-from contextlib import asynccontextmanager
 
 from neo4j import GraphDatabase, AsyncGraphDatabase
 from neo4j.exceptions import ServiceUnavailable, AuthError
@@ -581,7 +580,6 @@ class GraphDBService:
             return query  # No Korean, return as-is
 
         # Try to find matching Korean term
-        query_lower = query.lower().strip()
         for korean, english in self.KOREAN_MEDICAL_TERMS.items():
             if korean in query:
                 return english

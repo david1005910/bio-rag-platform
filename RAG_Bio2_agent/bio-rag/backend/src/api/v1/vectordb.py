@@ -10,9 +10,9 @@ import logging
 import uuid
 import re
 import math
-from typing import List, Optional, Dict, Set, Tuple
+from typing import List, Optional, Dict, Tuple
 from collections import Counter
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 import aiohttp
 import numpy as np
@@ -326,7 +326,6 @@ class QdrantDenseSearch:
     def _init_qdrant(self):
         """Initialize Qdrant client - try server first, then local mode"""
         from qdrant_client import QdrantClient
-        from qdrant_client.http.models import Distance, VectorParams
 
         # Try 1: Connect to Qdrant server (Docker)
         try:
@@ -399,7 +398,7 @@ class QdrantDenseSearch:
             logger.debug(f"get_collection_info error: {e}")
             # If we're in local mode and Qdrant is working, return success status
             if self.qdrant_mode == "local":
-                return {"status": f"qdrant_local", "vectors_count": 0, "mode": self.qdrant_mode}
+                return {"status": "qdrant_local", "vectors_count": 0, "mode": self.qdrant_mode}
             return {"status": "error", "error": str(e), "mode": self.qdrant_mode}
 
 
@@ -605,7 +604,6 @@ class HybridVectorStore:
         if score <= 0:
             return 0.0
         # Use log scaling for better distribution, cap at max_possible
-        import math
         # Scale factor to map typical BM25 scores (0-10) to 0-30 range
         scaled = min(score * 3.0, max_possible)
         return round(scaled, 2)
@@ -832,7 +830,7 @@ class HybridVectorStore:
         if self.qdrant_dense.use_qdrant:
             search_mode = f"hybrid (Qdrant {qdrant_mode} + SPLADE sparse)"
         else:
-            search_mode = f"hybrid (In-memory dense + SPLADE sparse)"
+            search_mode = "hybrid (In-memory dense + SPLADE sparse)"
 
         return {
             "collection_name": "biomedical_papers",

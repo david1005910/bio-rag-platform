@@ -1,7 +1,7 @@
 """AI Chat Service - OpenAI/Anthropic Integration with RAG"""
 
 import logging
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass
 import aiohttp
 

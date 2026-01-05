@@ -7,12 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from src.core.security import get_current_user_id, get_current_user_id_optional
+from src.core.database import get_db
 from src.data import sample_papers
 from src.services.pubmed import get_pubmed_service
 from src.services.ai_chat import get_ai_service, ChatSource
 from src.services.chat_memory import get_memory_service, format_memory_context
+from src.services.chat_session_service import ChatSessionService
 from src.core.config import settings
 from src.api.v1.vectordb import get_vector_store
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +200,6 @@ async def chat_query(
     start_time = time.time()
     sources = []
     papers_for_context = []
-    original_question = request.question
     search_query = request.question
     vectordb_used = False
     actual_search_mode = None
@@ -460,7 +462,8 @@ async def create_session(
 
 @router.get("/sessions", response_model=SessionListResponse)
 async def get_sessions(
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get all chat sessions for current user
@@ -468,9 +471,22 @@ async def get_sessions(
     - Requires authentication
     - Returns list of sessions with metadata
     """
-    # TODO: Fetch from database
+    from uuid import UUID
 
-    return SessionListResponse(sessions=[])
+    session_service = ChatSessionService(db)
+    db_sessions = await session_service.list_by_user(UUID(user_id))
+
+    sessions = []
+    for s in db_sessions:
+        msg_count = await session_service.get_message_count(s.id)
+        sessions.append(ChatSession(
+            id=str(s.id),
+            title=s.title,
+            created_at=s.created_at.isoformat(),
+            message_count=msg_count
+        ))
+
+    return SessionListResponse(sessions=sessions)
 
 
 @router.get("/sessions/{session_id}", response_model=ChatSession)
@@ -493,7 +509,8 @@ async def get_session(
 @router.get("/sessions/{session_id}/messages", response_model=MessageListResponse)
 async def get_session_messages(
     session_id: str,
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get all messages in a chat session
@@ -501,15 +518,30 @@ async def get_session_messages(
     - Requires authentication
     - Returns conversation history
     """
-    # TODO: Fetch from database
+    from uuid import UUID
 
-    return MessageListResponse(messages=[])
+    session_service = ChatSessionService(db)
+    db_messages = await session_service.get_messages(UUID(session_id))
+
+    messages = [
+        ChatMessage(
+            id=str(m.id),
+            role=m.role,
+            content=m.content,
+            sources=[SourceInfo(**s) for s in (m.sources or [])],
+            created_at=m.created_at.isoformat()
+        )
+        for m in db_messages
+    ]
+
+    return MessageListResponse(messages=messages)
 
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(
     session_id: str,
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Delete a chat session
@@ -517,7 +549,16 @@ async def delete_session(
     - Requires authentication
     - Removes all messages in the session
     """
-    # TODO: Delete from database
+    from uuid import UUID
+
+    session_service = ChatSessionService(db)
+    deleted = await session_service.delete(UUID(session_id))
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session {session_id} not found"
+        )
 
     return {"message": f"Session {session_id} deleted"}
 

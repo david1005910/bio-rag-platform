@@ -1,6 +1,5 @@
 """PubMed API Service - E-utilities Integration"""
 
-import asyncio
 import aiohttp
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Optional, Tuple

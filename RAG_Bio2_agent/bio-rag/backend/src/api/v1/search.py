@@ -3,14 +3,14 @@
 import time
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from fastapi.responses import Response
 
 from src.data import sample_papers
-from src.services.pubmed import get_pubmed_service, PubMedPaper
-from src.services.pmc import get_pmc_service, PMCPaperInfo
+from src.services.pubmed import get_pubmed_service
+from src.services.pmc import get_pmc_service
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,7 @@
 """Persistent user storage for authentication with JSON file backend"""
 
 from typing import Dict, Optional
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
 import uuid
 import json

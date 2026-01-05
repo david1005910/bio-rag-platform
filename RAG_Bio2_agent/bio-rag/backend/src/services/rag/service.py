@@ -299,7 +299,7 @@ FORMAT:
 
         except Exception as e:
             logger.error(f"LLM generation error: {e}")
-            return f"I encountered an error while generating the response. Please try again later."
+            return "I encountered an error while generating the response. Please try again later."
 
     def _validate_response(
         self,

@@ -8,6 +8,46 @@ from .celery import celery_app
 
 logger = logging.getLogger(__name__)
 
+
+async def _save_papers_to_db(papers: list) -> int:
+    """Save papers to database and queue embedding generation"""
+    from src.core.database import AsyncSessionLocal
+    from src.services.paper_service import PaperService
+    from src.tasks.embedding import process_paper_embeddings
+
+    saved_count = 0
+
+    async with AsyncSessionLocal() as db:
+        paper_service = PaperService(db)
+
+        for paper in papers:
+            try:
+                # Get or create paper in database
+                db_paper, created = await paper_service.get_or_create(
+                    pmid=paper.pmid,
+                    title=paper.title,
+                    abstract=paper.abstract,
+                    authors=paper.authors if hasattr(paper, 'authors') else [],
+                    journal=paper.journal if hasattr(paper, 'journal') else None,
+                    publication_date=paper.publication_date if hasattr(paper, 'publication_date') else None,
+                    doi=paper.doi if hasattr(paper, 'doi') else None,
+                    keywords=paper.keywords if hasattr(paper, 'keywords') else [],
+                    mesh_terms=paper.mesh_terms if hasattr(paper, 'mesh_terms') else [],
+                )
+
+                if created:
+                    saved_count += 1
+                    # Queue embedding generation for new papers
+                    process_paper_embeddings.delay(str(db_paper.id))
+                    logger.info(f"Queued embedding generation for paper: {paper.pmid}")
+
+            except Exception as e:
+                logger.error(f"Failed to save paper {paper.pmid}: {e}")
+
+        await db.commit()
+
+    return saved_count
+
 # Default keywords to crawl
 DEFAULT_KEYWORDS = [
     "CAR-T cell therapy",
@@ -61,8 +101,9 @@ async def _async_crawl(keywords: List[str]) -> dict:
             results[keyword] = len(papers)
             total_papers += len(papers)
 
-            # TODO: Save papers to database
-            # TODO: Trigger embedding generation
+            # Save papers to database and trigger embedding generation
+            saved_count = await _save_papers_to_db(papers)
+            logger.info(f"Saved {saved_count} new papers to database")
 
             logger.info(f"Found {len(papers)} papers for '{keyword}'")
 

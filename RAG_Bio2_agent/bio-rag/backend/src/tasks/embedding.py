@@ -27,19 +27,32 @@ def process_paper_embeddings(paper_id: str) -> dict:
 
 async def _async_process_paper(paper_id: str) -> dict:
     """Async implementation of paper embedding processing."""
+    from uuid import UUID
     from src.services.embedding.generator import EmbeddingGenerator
     from src.services.embedding.chunker import TextChunker
     from src.services.storage.vector_store import VectorStore
+    from src.core.database import AsyncSessionLocal
+    from src.services.paper_service import PaperService
 
     try:
-        # TODO: Fetch paper from database
-        # For now, use mock data
-        paper_data = {
-            "id": paper_id,
-            "pmid": "12345678",
-            "title": "Sample Paper Title",
-            "abstract": "This is a sample abstract for testing purposes."
-        }
+        # Fetch paper from database
+        async with AsyncSessionLocal() as db:
+            paper_service = PaperService(db)
+            paper = await paper_service.get_by_id(UUID(paper_id))
+
+            if not paper:
+                return {
+                    "paper_id": paper_id,
+                    "status": "error",
+                    "error": "Paper not found in database"
+                }
+
+            paper_data = {
+                "id": str(paper.id),
+                "pmid": paper.pmid,
+                "title": paper.title,
+                "abstract": paper.abstract or ""
+            }
 
         # Initialize services
         chunker = TextChunker()
@@ -133,8 +146,51 @@ def reindex_all() -> dict:
 
     WARNING: This clears the existing index!
     """
-    # TODO: Implement full reindex
-    return {
-        "status": "not_implemented",
-        "message": "Full reindex not yet implemented"
-    }
+    result = asyncio.run(_async_reindex_all())
+    return result
+
+
+async def _async_reindex_all() -> dict:
+    """Async implementation of full reindexing."""
+    from src.core.database import AsyncSessionLocal
+    from src.services.paper_service import PaperService
+    from src.services.storage.vector_store import VectorStore
+
+    try:
+        # Clear existing vector store
+        vector_store = VectorStore()
+        vector_store.clear()
+        logger.info("Cleared existing vector store")
+
+        # Fetch all papers from database
+        async with AsyncSessionLocal() as db:
+            paper_service = PaperService(db)
+            papers = await paper_service.list_all(limit=10000)
+
+        if not papers:
+            return {
+                "status": "completed",
+                "message": "No papers to reindex",
+                "papers_processed": 0
+            }
+
+        # Queue embedding generation for all papers
+        queued = 0
+        for paper in papers:
+            process_paper_embeddings.delay(str(paper.id))
+            queued += 1
+
+        logger.info(f"Queued {queued} papers for reindexing")
+
+        return {
+            "status": "completed",
+            "message": f"Queued {queued} papers for reindexing",
+            "papers_processed": queued
+        }
+
+    except Exception as e:
+        logger.error(f"Error during reindex: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
