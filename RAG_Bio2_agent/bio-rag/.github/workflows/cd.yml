@@ -39,7 +39,7 @@ jobs:
         run: |
           echo "📦 Backend deployment triggered"
           echo "Render auto-deploys from GitHub push"
-          echo "Service: bio-rag-platform-4.onrender.com"
+          echo "Service: bio-rag-platform-1.onrender.com"
 
       - name: Wait for Render deployment
         run: |
@@ -50,7 +50,7 @@ jobs:
         run: |
           echo "🔍 Checking backend health..."
           for i in {1..5}; do
-            response=$(curl -s -o /dev/null -w "%{http_code}" https://bio-rag-platform-4.onrender.com/health || echo "000")
+            response=$(curl -s -o /dev/null -w "%{http_code}" https://bio-rag-platform-1.onrender.com/health || echo "000")
             if [ "$response" = "200" ]; then
               echo "✅ Backend is healthy!"
               exit 0
@@ -106,8 +106,8 @@ jobs:
           echo "Branch: ${{ github.ref_name }}"
           echo ""
           echo "🔗 URLs:"
-          echo "  Backend:  https://bio-rag-platform-4.onrender.com"
+          echo "  Backend:  https://bio-rag-platform-1.onrender.com"
           echo "  Frontend: https://bio-rag.vercel.app"
-          echo "  API Docs: https://bio-rag-platform-4.onrender.com/docs"
+          echo "  API Docs: https://bio-rag-platform-1.onrender.com/docs"
           echo ""
           echo "✅ Deployment workflow completed!"
