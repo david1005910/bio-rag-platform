@@ -11,11 +11,16 @@ from src.core.database import get_db
 from src.data import sample_papers
 from src.services.pubmed import get_pubmed_service
 from src.services.ai_chat import get_ai_service, ChatSource
-from src.services.chat_memory import get_memory_service, format_memory_context
+from src.services.chat_memory import get_memory_service, format_memory_context, ChatMemoryService
 from src.services.chat_session_service import ChatSessionService
 from src.core.config import settings
 from src.api.v1.vectordb import get_vector_store
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def get_memory_service_dep(db: AsyncSession = Depends(get_db)) -> ChatMemoryService:
+    """Dependency for getting memory service with database session"""
+    return await get_memory_service(db)
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +181,8 @@ class MessageListResponse(BaseModel):
 @router.post("/query", response_model=ChatQueryResponse)
 async def chat_query(
     request: ChatQueryRequest,
-    user_id: Optional[str] = Depends(get_current_user_id_optional)
+    user_id: Optional[str] = Depends(get_current_user_id_optional),
+    memory_service: ChatMemoryService = Depends(get_memory_service_dep)
 ):
     """
     AI-powered Q&A about biomedical research with VectorDB Hybrid Search
@@ -312,23 +318,22 @@ async def chat_query(
             ))
 
     # Step 4: Search for similar past conversations (Memory)
+    # Uses Redis cache for fast lookups + PostgreSQL for persistent storage
     memory_used = False
     similar_questions_found = 0
     memory_context = ""
 
     if request.use_memory:
         try:
-            memory_service = get_memory_service()
-
-            # Check for exact match first
-            exact_match = memory_service.find_exact_match(request.question)
+            # Check for exact match first (Redis cache -> PostgreSQL)
+            exact_match = await memory_service.find_exact_match(request.question)
             if exact_match:
                 logger.info(f"Exact match found for query: '{request.question[:50]}...'")
                 similar_questions_found = 1
                 memory_used = True
 
-            # Search for similar past conversations
-            similar_conversations = memory_service.search_similar_conversations(
+            # Search for similar past conversations (Redis cache -> PostgreSQL)
+            similar_conversations = await memory_service.search_similar_conversations(
                 query=request.question,
                 limit=3,
                 min_relevance=0.1
@@ -375,16 +380,15 @@ async def chat_query(
 
             logger.info(f"AI response generated, confidence: {confidence}")
 
-            # Step 6: Save conversation to memory
+            # Step 6: Save conversation to memory (PostgreSQL + Redis cache)
             if request.use_memory:
                 try:
-                    memory_service = get_memory_service()
-                    memory_service.save_conversation(
+                    await memory_service.save_conversation(
                         query=request.question,
                         answer=answer,
                         sources_used=ai_response.sources_used
                     )
-                    logger.info("Conversation saved to memory")
+                    logger.info("Conversation saved to PostgreSQL and cached in Redis")
                 except Exception as e:
                     logger.warning(f"Failed to save conversation to memory: {e}")
 
@@ -568,12 +572,14 @@ async def delete_session(
 class MemoryStatsResponse(BaseModel):
     """Memory statistics response"""
     total_conversations: int
-    database_path: str
+    database_type: str
+    redis_available: bool = False
+    redis_cache_count: int = 0
 
 
 class RecentConversationResponse(BaseModel):
     """Recent conversation item"""
-    id: int
+    id: str  # UUID string
     query: str
     answer_preview: str
     created_at: str
@@ -585,20 +591,25 @@ class RecentConversationsListResponse(BaseModel):
 
 
 @router.get("/memory/stats", response_model=MemoryStatsResponse)
-async def get_memory_stats():
+async def get_memory_stats(
+    memory_service: ChatMemoryService = Depends(get_memory_service_dep)
+):
     """
     Get chat memory statistics
 
     - Returns total number of stored conversations
-    - Returns database path
+    - Returns Redis cache status
+    - Returns database type (PostgreSQL + Redis)
     """
     try:
-        memory_service = get_memory_service()
-        count = memory_service.get_conversation_count()
+        count = await memory_service.get_conversation_count()
+        stats = await memory_service.get_cache_stats()
 
         return MemoryStatsResponse(
             total_conversations=count,
-            database_path=str(memory_service.db_path)
+            database_type=memory_service.db_path,
+            redis_available=stats.get("redis_available", False),
+            redis_cache_count=stats.get("redis", {}).get("hash_cache_count", 0)
         )
     except Exception as e:
         logger.error(f"Failed to get memory stats: {e}")
@@ -606,16 +617,20 @@ async def get_memory_stats():
 
 
 @router.get("/memory/recent", response_model=RecentConversationsListResponse)
-async def get_recent_conversations(limit: int = 10):
+async def get_recent_conversations(
+    limit: int = 10,
+    memory_service: ChatMemoryService = Depends(get_memory_service_dep)
+):
     """
     Get recent conversations from memory
 
+    - Uses Redis cache for fast retrieval
+    - Falls back to PostgreSQL if cache miss
     - Returns list of recent Q&A pairs
     - Answer is truncated for preview
     """
     try:
-        memory_service = get_memory_service()
-        conversations = memory_service.get_recent_conversations(limit=limit)
+        conversations = await memory_service.get_recent_conversations(limit=limit)
 
         return RecentConversationsListResponse(
             conversations=[
@@ -634,20 +649,24 @@ async def get_recent_conversations(limit: int = 10):
 
 
 @router.delete("/memory/clear")
-async def clear_old_memory(days: int = 30):
+async def clear_old_memory(
+    days: int = 30,
+    memory_service: ChatMemoryService = Depends(get_memory_service_dep)
+):
     """
     Clear old conversations from memory
 
-    - Removes conversations older than specified days
+    - Removes conversations older than specified days from PostgreSQL
+    - Clears all Redis cache entries
     - Returns number of deleted conversations
     """
     try:
-        memory_service = get_memory_service()
-        deleted_count = memory_service.clear_old_conversations(days=days)
+        deleted_count = await memory_service.clear_old_conversations(days=days)
 
         return {
             "message": f"Cleared {deleted_count} conversations older than {days} days",
-            "deleted_count": deleted_count
+            "deleted_count": deleted_count,
+            "cache_cleared": True
         }
     except Exception as e:
         logger.error(f"Failed to clear memory: {e}")

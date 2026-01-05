@@ -1,166 +1,162 @@
-"""Chat Memory Service - SQLite-based conversation history for RAG enhancement"""
+"""Chat Memory Service - Redis Cache + PostgreSQL Persistent Storage
 
-import sqlite3
+Architecture:
+- Redis: Fast cache layer for exact match lookups and recent queries
+- PostgreSQL: Persistent storage for all conversation history
+
+Flow:
+1. Search: Check Redis cache first -> If miss, query PostgreSQL -> Cache result
+2. Save: Save to PostgreSQL -> Cache in Redis for quick subsequent lookups
+"""
+
 import logging
-from typing import List, Optional
-from dataclasses import dataclass
-from pathlib import Path
 import hashlib
+from typing import List, Optional
+from uuid import UUID
+from dataclasses import dataclass
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.services.redis_cache import RedisCacheService, get_redis_cache
+from src.services.memory_store import MemoryStoreService
+from src.models.memory import ChatMemory
 
 logger = logging.getLogger(__name__)
-
-# Database path
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "chat_memory.db"
 
 
 @dataclass
 class ConversationMemory:
     """Stored conversation memory"""
-    id: int
+    id: str
     query: str
     answer: str
     query_hash: str
     created_at: str
     relevance_score: float = 0.0
+    sources_used: Optional[str] = None
 
 
 class ChatMemoryService:
-    """SQLite-based chat memory for storing and retrieving past Q&A"""
+    """
+    Hybrid chat memory service using Redis cache + PostgreSQL storage
 
-    def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = db_path or DB_PATH
-        self._ensure_db_exists()
-        self._init_database()
+    Features:
+    - Fast exact match lookups via Redis cache
+    - Persistent storage in PostgreSQL
+    - Automatic cache invalidation on updates
+    - Fallback to PostgreSQL if Redis is unavailable
+    """
 
-    def _ensure_db_exists(self):
-        """Ensure the database directory exists"""
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(
+        self,
+        db: AsyncSession,
+        redis_cache: Optional[RedisCacheService] = None
+    ):
+        self.db = db
+        self.store = MemoryStoreService(db)
+        self._redis = redis_cache
+        self._redis_available = True
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get a database connection"""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        return conn
+    async def _get_redis(self) -> Optional[RedisCacheService]:
+        """Get Redis cache service, handling connection failures gracefully"""
+        if not self._redis_available:
+            return None
 
-    def _init_database(self):
-        """Initialize the database schema"""
-        conn = self._get_connection()
         try:
-            cursor = conn.cursor()
+            if self._redis is None:
+                self._redis = await get_redis_cache()
 
-            # Create conversations table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS conversations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    query TEXT NOT NULL,
-                    answer TEXT NOT NULL,
-                    query_hash TEXT NOT NULL,
-                    sources_used TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            # Create FTS virtual table for full-text search
-            cursor.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
-                    query,
-                    answer,
-                    content='conversations',
-                    content_rowid='id'
-                )
-            """)
-
-            # Create triggers to keep FTS in sync
-            cursor.execute("""
-                CREATE TRIGGER IF NOT EXISTS conversations_ai AFTER INSERT ON conversations BEGIN
-                    INSERT INTO conversations_fts(rowid, query, answer)
-                    VALUES (new.id, new.query, new.answer);
-                END
-            """)
-
-            cursor.execute("""
-                CREATE TRIGGER IF NOT EXISTS conversations_ad AFTER DELETE ON conversations BEGIN
-                    INSERT INTO conversations_fts(conversations_fts, rowid, query, answer)
-                    VALUES('delete', old.id, old.query, old.answer);
-                END
-            """)
-
-            cursor.execute("""
-                CREATE TRIGGER IF NOT EXISTS conversations_au AFTER UPDATE ON conversations BEGIN
-                    INSERT INTO conversations_fts(conversations_fts, rowid, query, answer)
-                    VALUES('delete', old.id, old.query, old.answer);
-                    INSERT INTO conversations_fts(rowid, query, answer)
-                    VALUES (new.id, new.query, new.answer);
-                END
-            """)
-
-            # Create index for faster lookups
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_query_hash ON conversations(query_hash)
-            """)
-
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_created_at ON conversations(created_at DESC)
-            """)
-
-            conn.commit()
-            logger.info(f"Chat memory database initialized at {self.db_path}")
+            # Check connection
+            if await self._redis.is_connected():
+                return self._redis
+            else:
+                self._redis_available = False
+                logger.warning("Redis not available, falling back to PostgreSQL only")
+                return None
 
         except Exception as e:
-            logger.error(f"Failed to initialize database: {e}")
-            raise
-        finally:
-            conn.close()
+            self._redis_available = False
+            logger.warning(f"Redis connection failed: {e}, falling back to PostgreSQL only")
+            return None
 
     def _hash_query(self, query: str) -> str:
         """Generate a hash for the query for exact match detection"""
         normalized = query.lower().strip()
         return hashlib.md5(normalized.encode()).hexdigest()
 
-    def save_conversation(
+    def _memory_to_dataclass(self, memory: ChatMemory) -> ConversationMemory:
+        """Convert ChatMemory model to ConversationMemory dataclass"""
+        return ConversationMemory(
+            id=str(memory.id),
+            query=memory.query,
+            answer=memory.answer,
+            query_hash=memory.query_hash,
+            created_at=memory.created_at.isoformat() if memory.created_at else "",
+            relevance_score=memory.relevance_score or 0.0,
+            sources_used=memory.sources_used,
+        )
+
+    def _dict_to_dataclass(self, data: dict) -> ConversationMemory:
+        """Convert dict to ConversationMemory dataclass"""
+        return ConversationMemory(
+            id=data.get("id", ""),
+            query=data.get("query", ""),
+            answer=data.get("answer", ""),
+            query_hash=data.get("query_hash", ""),
+            created_at=data.get("created_at", ""),
+            relevance_score=data.get("relevance_score", 0.0),
+            sources_used=data.get("sources_used"),
+        )
+
+    async def save_conversation(
         self,
         query: str,
         answer: str,
-        sources_used: Optional[List[str]] = None
-    ) -> int:
+        sources_used: Optional[List[str]] = None,
+        user_id: Optional[UUID] = None,
+    ) -> str:
         """
-        Save a conversation to the database
+        Save a conversation to PostgreSQL and cache in Redis
 
         Args:
             query: User's question
             answer: AI's response
             sources_used: List of PMIDs used in the response
+            user_id: Optional user ID
 
         Returns:
             The ID of the saved conversation
         """
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
+        # Save to PostgreSQL (persistent storage)
+        memory = await self.store.save(
+            query=query,
+            answer=answer,
+            sources_used=sources_used,
+            user_id=user_id,
+        )
 
-            query_hash = self._hash_query(query)
-            sources_str = ",".join(sources_used) if sources_used else ""
+        # Cache in Redis for fast subsequent lookups
+        redis = await self._get_redis()
+        if redis:
+            try:
+                await redis.set_by_hash(
+                    memory.query_hash,
+                    memory.to_dict()
+                )
+                # Invalidate recent cache since we added new data
+                await redis.invalidate_recent()
+                logger.debug(f"Cached memory in Redis: {memory.query_hash[:8]}...")
+            except Exception as e:
+                logger.warning(f"Failed to cache in Redis: {e}")
 
-            cursor.execute("""
-                INSERT INTO conversations (query, answer, query_hash, sources_used)
-                VALUES (?, ?, ?, ?)
-            """, (query, answer, query_hash, sources_str))
+        logger.info(f"Saved conversation {memory.id}: '{query[:50]}...'")
+        return str(memory.id)
 
-            conn.commit()
-            conversation_id = cursor.lastrowid
-
-            logger.info(f"Saved conversation {conversation_id}: '{query[:50]}...'")
-            return conversation_id
-
-        except Exception as e:
-            logger.error(f"Failed to save conversation: {e}")
-            raise
-        finally:
-            conn.close()
-
-    def find_exact_match(self, query: str) -> Optional[ConversationMemory]:
+    async def find_exact_match(self, query: str) -> Optional[ConversationMemory]:
         """
-        Find an exact match for a query (same question asked before)
+        Find an exact match for a query
+
+        Flow: Redis cache -> PostgreSQL
 
         Args:
             query: User's question
@@ -168,164 +164,159 @@ class ChatMemoryService:
         Returns:
             ConversationMemory if found, None otherwise
         """
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            query_hash = self._hash_query(query)
+        query_hash = self._hash_query(query)
 
-            cursor.execute("""
-                SELECT id, query, answer, query_hash, created_at
-                FROM conversations
-                WHERE query_hash = ?
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (query_hash,))
+        # 1. Try Redis cache first
+        redis = await self._get_redis()
+        if redis:
+            try:
+                cached = await redis.get_by_hash(query_hash)
+                if cached:
+                    logger.info(f"Cache HIT for exact match: {query[:30]}...")
+                    return self._dict_to_dataclass(cached)
+            except Exception as e:
+                logger.warning(f"Redis lookup failed: {e}")
 
-            row = cursor.fetchone()
-            if row:
-                return ConversationMemory(
-                    id=row['id'],
-                    query=row['query'],
-                    answer=row['answer'],
-                    query_hash=row['query_hash'],
-                    created_at=row['created_at'],
-                    relevance_score=1.0
-                )
-            return None
+        # 2. Fall back to PostgreSQL
+        memory = await self.store.find_by_hash(query_hash)
 
-        finally:
-            conn.close()
+        if memory:
+            logger.info(f"PostgreSQL HIT for exact match: {query[:30]}...")
 
-    def search_similar_conversations(
+            # Cache result in Redis for next time
+            if redis:
+                try:
+                    await redis.set_by_hash(query_hash, memory.to_dict())
+                except Exception as e:
+                    logger.warning(f"Failed to cache result: {e}")
+
+            return self._memory_to_dataclass(memory)
+
+        logger.debug(f"No exact match found for: {query[:30]}...")
+        return None
+
+    async def search_similar_conversations(
         self,
         query: str,
         limit: int = 3,
         min_relevance: float = 0.1
     ) -> List[ConversationMemory]:
         """
-        Search for similar past conversations using FTS
+        Search for similar past conversations
+
+        Flow: Check Redis cache -> PostgreSQL search
 
         Args:
             query: User's question
             limit: Maximum number of results
-            min_relevance: Minimum relevance score (BM25-based)
+            min_relevance: Minimum relevance score
 
         Returns:
             List of relevant ConversationMemory objects
         """
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
+        # Check Redis cache for search results
+        redis = await self._get_redis()
+        if redis:
+            try:
+                cached = await redis.get_search_results(query)
+                if cached:
+                    logger.info(f"Cache HIT for similar search: {query[:30]}...")
+                    return [self._dict_to_dataclass(m) for m in cached]
+            except Exception as e:
+                logger.warning(f"Redis search cache lookup failed: {e}")
 
-            # Extract keywords from the query for FTS search
-            # Remove common Korean/English stop words
-            stop_words = {
-                '은', '는', '이', '가', '을', '를', '의', '에', '에서', '로', '으로',
-                '와', '과', '도', '만', '에게', '한테', '께', '보다', '처럼', '같이',
-                'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
-                'what', 'how', 'why', 'when', 'where', 'which', 'who',
-                '무엇', '어떻게', '왜', '언제', '어디', '누가', '뭐', '뭘'
-            }
+        # Search in PostgreSQL
+        memories = await self.store.search_similar(
+            query=query,
+            limit=limit,
+            min_relevance=min_relevance
+        )
 
-            # Tokenize and filter
-            words = query.replace('?', '').replace('!', '').replace('.', '').split()
-            keywords = [w for w in words if w.lower() not in stop_words and len(w) > 1]
+        results = [self._memory_to_dataclass(m) for m in memories]
 
-            if not keywords:
-                return []
+        # Cache search results in Redis
+        if redis and results:
+            try:
+                await redis.set_search_results(
+                    query,
+                    [
+                        {
+                            "id": r.id,
+                            "query": r.query,
+                            "answer": r.answer,
+                            "query_hash": r.query_hash,
+                            "created_at": r.created_at,
+                            "relevance_score": r.relevance_score,
+                            "sources_used": r.sources_used,
+                        }
+                        for r in results
+                    ]
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cache search results: {e}")
 
-            # Build FTS query with OR between keywords
-            fts_query = " OR ".join(keywords)
+        return results
 
-            cursor.execute("""
-                SELECT
-                    c.id,
-                    c.query,
-                    c.answer,
-                    c.query_hash,
-                    c.created_at,
-                    bm25(conversations_fts) as relevance
-                FROM conversations_fts
-                JOIN conversations c ON conversations_fts.rowid = c.id
-                WHERE conversations_fts MATCH ?
-                ORDER BY relevance
-                LIMIT ?
-            """, (fts_query, limit * 2))  # Get more results to filter
-
-            results = []
-            for row in cursor.fetchall():
-                # Normalize BM25 score (lower is better, so we invert)
-                # BM25 scores are typically negative, closer to 0 is better
-                relevance = max(0, 1 + row['relevance'] / 10)  # Normalize to 0-1ish
-
-                if relevance >= min_relevance:
-                    results.append(ConversationMemory(
-                        id=row['id'],
-                        query=row['query'],
-                        answer=row['answer'],
-                        query_hash=row['query_hash'],
-                        created_at=row['created_at'],
-                        relevance_score=relevance
-                    ))
-
-            # Sort by relevance and return top results
-            results.sort(key=lambda x: x.relevance_score, reverse=True)
-            return results[:limit]
-
-        except Exception as e:
-            logger.error(f"Failed to search conversations: {e}")
-            return []
-        finally:
-            conn.close()
-
-    def get_recent_conversations(self, limit: int = 5) -> List[ConversationMemory]:
+    async def get_recent_conversations(
+        self,
+        limit: int = 10,
+        user_id: Optional[UUID] = None
+    ) -> List[ConversationMemory]:
         """
         Get the most recent conversations
 
+        Flow: Redis cache -> PostgreSQL
+
         Args:
             limit: Maximum number of results
+            user_id: Optional user ID to filter
 
         Returns:
             List of recent ConversationMemory objects
         """
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
+        # Try Redis cache first (only for non-user-specific queries)
+        if not user_id:
+            redis = await self._get_redis()
+            if redis:
+                try:
+                    cached = await redis.get_recent(limit)
+                    if cached:
+                        logger.debug("Cache HIT for recent conversations")
+                        return [self._dict_to_dataclass(m) for m in cached]
+                except Exception as e:
+                    logger.warning(f"Redis recent cache lookup failed: {e}")
 
-            cursor.execute("""
-                SELECT id, query, answer, query_hash, created_at
-                FROM conversations
-                ORDER BY created_at DESC
-                LIMIT ?
-            """, (limit,))
+        # Fetch from PostgreSQL
+        memories = await self.store.get_recent(limit=limit, user_id=user_id)
+        results = [self._memory_to_dataclass(m) for m in memories]
 
-            results = []
-            for row in cursor.fetchall():
-                results.append(ConversationMemory(
-                    id=row['id'],
-                    query=row['query'],
-                    answer=row['answer'],
-                    query_hash=row['query_hash'],
-                    created_at=row['created_at'],
-                    relevance_score=0.5  # Default score for recent
-                ))
+        # Cache results in Redis (only for non-user-specific queries)
+        if not user_id:
+            redis = await self._get_redis()
+            if redis and results:
+                try:
+                    await redis.set_recent([
+                        {
+                            "id": r.id,
+                            "query": r.query,
+                            "answer": r.answer,
+                            "query_hash": r.query_hash,
+                            "created_at": r.created_at,
+                            "relevance_score": r.relevance_score,
+                            "sources_used": r.sources_used,
+                        }
+                        for r in results
+                    ])
+                except Exception as e:
+                    logger.warning(f"Failed to cache recent: {e}")
 
-            return results
+        return results
 
-        finally:
-            conn.close()
-
-    def get_conversation_count(self) -> int:
+    async def get_conversation_count(self, user_id: Optional[UUID] = None) -> int:
         """Get the total number of stored conversations"""
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM conversations")
-            return cursor.fetchone()[0]
-        finally:
-            conn.close()
+        return await self.store.get_count(user_id=user_id)
 
-    def clear_old_conversations(self, days: int = 30) -> int:
+    async def clear_old_conversations(self, days: int = 30) -> int:
         """
         Clear conversations older than specified days
 
@@ -335,36 +326,42 @@ class ChatMemoryService:
         Returns:
             Number of deleted conversations
         """
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
+        deleted = await self.store.delete_old(days=days)
 
-            cursor.execute("""
-                DELETE FROM conversations
-                WHERE created_at < datetime('now', ? || ' days')
-            """, (f"-{days}",))
+        # Clear Redis cache since data has changed
+        redis = await self._get_redis()
+        if redis:
+            try:
+                await redis.clear_all_memory_cache()
+            except Exception as e:
+                logger.warning(f"Failed to clear Redis cache: {e}")
 
-            deleted_count = cursor.rowcount
-            conn.commit()
+        return deleted
 
-            logger.info(f"Cleared {deleted_count} old conversations")
-            return deleted_count
+    async def get_cache_stats(self) -> dict:
+        """Get cache statistics"""
+        stats = {
+            "postgresql_count": await self.store.get_count(),
+            "redis_available": self._redis_available,
+        }
 
-        finally:
-            conn.close()
+        redis = await self._get_redis()
+        if redis:
+            try:
+                redis_stats = await redis.get_cache_stats()
+                stats["redis"] = redis_stats
+            except Exception as e:
+                stats["redis"] = {"error": str(e)}
+
+        return stats
+
+    @property
+    def db_path(self) -> str:
+        """Return database type for compatibility"""
+        return "PostgreSQL + Redis"
 
 
-# Global service instance
-_memory_service: Optional[ChatMemoryService] = None
-
-
-def get_memory_service() -> ChatMemoryService:
-    """Get or create chat memory service instance"""
-    global _memory_service
-    if _memory_service is None:
-        _memory_service = ChatMemoryService()
-    return _memory_service
-
+# ============== Helper Functions ==============
 
 def format_memory_context(memories: List[ConversationMemory]) -> str:
     """
@@ -396,3 +393,20 @@ def format_memory_context(memories: List[ConversationMemory]) -> str:
     context_parts.append("\n---\n위의 과거 대화를 참고하되, 새로운 정보가 있다면 업데이트된 내용으로 답변해주세요.\n")
 
     return "".join(context_parts)
+
+
+# ============== Dependency Injection ==============
+
+async def get_memory_service(db: AsyncSession) -> ChatMemoryService:
+    """
+    Get chat memory service instance
+
+    Usage:
+        @app.get("/chat")
+        async def chat(
+            memory: ChatMemoryService = Depends(get_memory_service_dep)
+        ):
+            ...
+    """
+    redis = await get_redis_cache()
+    return ChatMemoryService(db=db, redis_cache=redis)
