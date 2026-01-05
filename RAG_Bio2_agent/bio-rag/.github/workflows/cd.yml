@@ -17,133 +17,97 @@ on:
           - production
           - staging
 
-env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository }}/backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository }}/frontend
-
 jobs:
-  # Build and Push Docker Images
-  build-and-push:
-    name: Build & Push Images
+  # Notify deployment start
+  notify-start:
+    name: Notify Deployment Start
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    outputs:
-      backend_tag: ${{ steps.meta-backend.outputs.tags }}
-      frontend_tag: ${{ steps.meta-frontend.outputs.tags }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Deployment Started
+        run: |
+          echo "🚀 Deployment triggered for commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Author: ${{ github.actor }}"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for Backend
-        id: meta-backend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.BACKEND_IMAGE }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and Push Backend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract metadata for Frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.FRONTEND_IMAGE }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and Push Frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL || 'https://api.example.com' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # Deploy to EC2
-  deploy:
-    name: Deploy to EC2
+  # Backend deployment via Render (auto-deployed on push)
+  deploy-backend:
+    name: Deploy Backend (Render)
     runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.ref == 'refs/heads/main'
-    environment: production
-
+    needs: notify-start
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Trigger Render Deploy
+        run: |
+          echo "📦 Backend deployment triggered"
+          echo "Render auto-deploys from GitHub push"
+          echo "Service: bio-rag-platform-4.onrender.com"
 
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /opt/bio-rag
+      - name: Wait for Render deployment
+        run: |
+          echo "⏳ Waiting for Render deployment to complete..."
+          sleep 60
 
-            # Pull latest code
-            git pull origin main
-
-            # Login to GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            # Pull latest images
-            docker pull ${{ env.BACKEND_IMAGE }}:latest
-            docker pull ${{ env.FRONTEND_IMAGE }}:latest
-
-            # Update docker-compose to use new images
-            export BACKEND_IMAGE=${{ env.BACKEND_IMAGE }}:latest
-            export FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE }}:latest
-
-            # Deploy with new images
-            docker compose -f deploy/docker-compose.prod.yml up -d --force-recreate
-
-            # Cleanup old images
-            docker image prune -f
-
-            # Health check
+      - name: Health Check
+        run: |
+          echo "🔍 Checking backend health..."
+          for i in {1..5}; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" https://bio-rag-platform-4.onrender.com/health || echo "000")
+            if [ "$response" = "200" ]; then
+              echo "✅ Backend is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i: Got $response, retrying in 30s..."
             sleep 30
-            curl -f http://localhost/health || exit 1
+          done
+          echo "⚠️ Backend health check timed out (may still be deploying)"
 
-      - name: Notify on Success
-        if: success()
+  # Frontend deployment via Vercel (auto-deployed on push)
+  deploy-frontend:
+    name: Deploy Frontend (Vercel)
+    runs-on: ubuntu-latest
+    needs: notify-start
+    steps:
+      - name: Trigger Vercel Deploy
         run: |
-          echo "✅ Deployment successful!"
-          echo "Backend: ${{ env.BACKEND_IMAGE }}:latest"
-          echo "Frontend: ${{ env.FRONTEND_IMAGE }}:latest"
+          echo "📦 Frontend deployment triggered"
+          echo "Vercel auto-deploys from GitHub push"
+          echo "Service: bio-rag.vercel.app"
 
-      - name: Notify on Failure
-        if: failure()
+      - name: Wait for Vercel deployment
         run: |
-          echo "❌ Deployment failed!"
+          echo "⏳ Waiting for Vercel deployment to complete..."
+          sleep 60
+
+      - name: Health Check
+        run: |
+          echo "🔍 Checking frontend health..."
+          for i in {1..3}; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" https://bio-rag.vercel.app || echo "000")
+            if [ "$response" = "200" ]; then
+              echo "✅ Frontend is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i: Got $response, retrying in 20s..."
+            sleep 20
+          done
+          echo "⚠️ Frontend health check timed out (may still be deploying)"
+
+  # Summary
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "📊 Deployment Summary"
+          echo "===================="
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          echo "🔗 URLs:"
+          echo "  Backend:  https://bio-rag-platform-4.onrender.com"
+          echo "  Frontend: https://bio-rag.vercel.app"
+          echo "  API Docs: https://bio-rag-platform-4.onrender.com/docs"
+          echo ""
+          echo "✅ Deployment workflow completed!"

@@ -90,3 +90,4 @@ backend/data/
 # Frontend test files
 frontend/test-*.mjs
 frontend/*.png
+.vercel

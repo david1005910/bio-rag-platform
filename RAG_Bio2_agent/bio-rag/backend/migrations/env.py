@@ -18,7 +18,13 @@ from src.models import *  # noqa: Import all models
 config = context.config
 
 # Set sqlalchemy.url from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("+asyncpg", ""))
+# Handle Render's postgres:// format (SQLAlchemy requires postgresql://)
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+# Remove async driver for Alembic sync operations
+db_url = db_url.replace("+asyncpg", "")
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
