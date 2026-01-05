@@ -46,7 +46,16 @@ export default function RegisterPage() {
       }
       navigate('/')
     },
-    onError: () => {
+    onError: (error: unknown) => {
+      console.error('Registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { data?: { detail?: string } } }
+        const detail = axiosError.response?.data?.detail
+        if (detail) {
+          setError(typeof detail === 'string' ? detail : JSON.stringify(detail))
+          return
+        }
+      }
       setError('회원가입 중 오류가 발생했습니다. 다시 시도해주세요.')
     },
   })
