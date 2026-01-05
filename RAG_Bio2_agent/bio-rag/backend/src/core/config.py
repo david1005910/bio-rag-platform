@@ -53,6 +53,7 @@ class Settings(BaseSettings):
         "https://bio-rag.vercel.app",
         "https://bio-rag-platform.vercel.app",
         "https://frontend-flame-five-90.vercel.app",
+        "https://frontend-cr8ftgbhq-sharkeys-projects-fa97893e.vercel.app",
     ]
 
     # Celery
